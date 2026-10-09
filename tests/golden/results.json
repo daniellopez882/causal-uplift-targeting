@@ -1,0 +1,664 @@
+{
+ "dataset": {
+  "rows": 3000,
+  "outcome": "purchase",
+  "binary_outcome": true,
+  "features": [
+   "x0",
+   "x1",
+   "x2",
+   "x3",
+   "x4",
+   "x5",
+   "x6",
+   "x7",
+   "x8",
+   "x9"
+  ],
+  "arms": [
+   "control",
+   "arm1",
+   "arm2"
+  ],
+  "rows_per_arm": {
+   "control": 995,
+   "arm1": 997,
+   "arm2": 1008
+  },
+  "outcome_mean_per_arm": {
+   "control": 0.3095,
+   "arm1": 0.341,
+   "arm2": 0.3244
+  }
+ },
+ "settings": {
+  "folds": 2,
+  "n_boot": 50,
+  "seed": 0,
+  "base": {
+   "kind": "lightgbm",
+   "params": {
+    "n_estimators": 60
+   },
+   "seed": 0,
+   "n_jobs": 1
+  },
+  "budgets": [
+   0.1,
+   0.3
+  ],
+  "costs": null
+ },
+ "learners": {
+  "t": {
+   "fit_seconds_per_fold": [
+    0.1,
+    0.1
+   ],
+   "fit_seconds_mean": 0.1,
+   "predict_seconds_mean": 0.01,
+   "ranking": {
+    "arm1": {
+     "qini": {
+      "value": 0.0969,
+      "lo": 0.0494,
+      "hi": 0.1444
+     },
+     "auuc": {
+      "value": 0.0947,
+      "lo": 0.0505,
+      "hi": 0.1366
+     },
+     "curve": {
+      "fraction": [
+       0.0,
+       0.1,
+       0.2,
+       0.3,
+       0.4,
+       0.5,
+       0.6,
+       0.7,
+       0.8,
+       0.9,
+       1.0
+      ],
+      "incremental_per_customer": [
+       0.0,
+       0.0013,
+       0.0102,
+       0.023,
+       0.0275,
+       0.0351,
+       0.03,
+       0.0315,
+       0.0233,
+       0.0185,
+       0.0158
+      ]
+     }
+    },
+    "arm2": {
+     "qini": {
+      "value": -0.013,
+      "lo": -0.0587,
+      "hi": 0.024
+     },
+     "auuc": {
+      "value": -0.0123,
+      "lo": -0.0563,
+      "hi": 0.0247
+     },
+     "curve": {
+      "fraction": [
+       0.0,
+       0.1,
+       0.2,
+       0.3,
+       0.4,
+       0.5,
+       0.6,
+       0.7,
+       0.8,
+       0.9,
+       1.0
+      ],
+      "incremental_per_customer": [
+       0.0,
+       0.0029,
+       0.003,
+       -0.0003,
+       -0.0012,
+       -0.0007,
+       0.0008,
+       0.0027,
+       0.0047,
+       0.0082,
+       0.0075
+      ]
+     }
+    }
+   },
+   "pehe": {
+    "all": 0.0749,
+    "arm1": 0.0779,
+    "arm2": 0.0718
+   }
+  },
+  "forest-ed": {
+   "fit_seconds_per_fold": [
+    0.1,
+    0.1
+   ],
+   "fit_seconds_mean": 0.1,
+   "predict_seconds_mean": 0.01,
+   "ranking": {
+    "arm1": {
+     "qini": {
+      "value": 0.0804,
+      "lo": 0.0343,
+      "hi": 0.1227
+     },
+     "auuc": {
+      "value": 0.0841,
+      "lo": 0.0392,
+      "hi": 0.1286
+     },
+     "curve": {
+      "fraction": [
+       0.0,
+       0.1,
+       0.2,
+       0.3,
+       0.4,
+       0.5,
+       0.6,
+       0.7,
+       0.8,
+       0.9,
+       1.0
+      ],
+      "incremental_per_customer": [
+       0.0,
+       0.0039,
+       0.0088,
+       0.0182,
+       0.0235,
+       0.0261,
+       0.0317,
+       0.0247,
+       0.025,
+       0.0168,
+       0.0158
+      ]
+     }
+    },
+    "arm2": {
+     "qini": {
+      "value": 0.033,
+      "lo": -0.0234,
+      "hi": 0.0818
+     },
+     "auuc": {
+      "value": 0.0331,
+      "lo": -0.0223,
+      "hi": 0.0809
+     },
+     "curve": {
+      "fraction": [
+       0.0,
+       0.1,
+       0.2,
+       0.3,
+       0.4,
+       0.5,
+       0.6,
+       0.7,
+       0.8,
+       0.9,
+       1.0
+      ],
+      "incremental_per_customer": [
+       0.0,
+       0.0025,
+       0.0045,
+       0.007,
+       0.0063,
+       0.0108,
+       0.0122,
+       0.0107,
+       0.0109,
+       0.0115,
+       0.0075
+      ]
+     }
+    }
+   },
+   "pehe": {
+    "all": 0.0766,
+    "arm1": 0.0954,
+    "arm2": 0.0514
+   }
+  },
+  "response": {
+   "fit_seconds_per_fold": [
+    0.1,
+    0.1
+   ],
+   "fit_seconds_mean": 0.1,
+   "predict_seconds_mean": 0.01,
+   "ranking": {
+    "arm1": {
+     "qini": {
+      "value": -0.115,
+      "lo": -0.1522,
+      "hi": -0.0775
+     },
+     "auuc": {
+      "value": -0.1137,
+      "lo": -0.1468,
+      "hi": -0.0778
+     },
+     "curve": {
+      "fraction": [
+       0.0,
+       0.1,
+       0.2,
+       0.3,
+       0.4,
+       0.5,
+       0.6,
+       0.7,
+       0.8,
+       0.9,
+       1.0
+      ],
+      "incremental_per_customer": [
+       0.0,
+       -0.0037,
+       -0.0116,
+       -0.0163,
+       -0.0155,
+       -0.0191,
+       -0.0125,
+       -0.0106,
+       -0.002,
+       0.0076,
+       0.0158
+      ]
+     }
+    },
+    "arm2": {
+     "qini": {
+      "value": -0.014,
+      "lo": -0.0594,
+      "hi": 0.0238
+     },
+     "auuc": {
+      "value": -0.0135,
+      "lo": -0.0575,
+      "hi": 0.021
+     },
+     "curve": {
+      "fraction": [
+       0.0,
+       0.1,
+       0.2,
+       0.3,
+       0.4,
+       0.5,
+       0.6,
+       0.7,
+       0.8,
+       0.9,
+       1.0
+      ],
+      "incremental_per_customer": [
+       0.0,
+       0.0015,
+       0.0029,
+       0.0033,
+       0.0039,
+       -0.0042,
+       -0.0028,
+       0.0027,
+       0.0029,
+       0.0028,
+       0.0075
+      ]
+     }
+    }
+   },
+   "pehe": {
+    "all": 0.3669,
+    "arm1": 0.3722,
+    "arm2": 0.3615
+   }
+  },
+  "random": {
+   "fit_seconds_per_fold": [
+    0.1,
+    0.1
+   ],
+   "fit_seconds_mean": 0.1,
+   "predict_seconds_mean": 0.01,
+   "ranking": {
+    "arm1": {
+     "qini": {
+      "value": 0.0178,
+      "lo": -0.0204,
+      "hi": 0.0624
+     },
+     "auuc": {
+      "value": 0.0191,
+      "lo": -0.0172,
+      "hi": 0.0646
+     },
+     "curve": {
+      "fraction": [
+       0.0,
+       0.1,
+       0.2,
+       0.3,
+       0.4,
+       0.5,
+       0.6,
+       0.7,
+       0.8,
+       0.9,
+       1.0
+      ],
+      "incremental_per_customer": [
+       0.0,
+       -0.0019,
+       0.0033,
+       0.0077,
+       0.0054,
+       0.0091,
+       0.0115,
+       0.0154,
+       0.0194,
+       0.0208,
+       0.0158
+      ]
+     }
+    },
+    "arm2": {
+     "qini": {
+      "value": 0.0949,
+      "lo": 0.0547,
+      "hi": 0.1286
+     },
+     "auuc": {
+      "value": 0.0924,
+      "lo": 0.0526,
+      "hi": 0.1232
+     },
+     "curve": {
+      "fraction": [
+       0.0,
+       0.1,
+       0.2,
+       0.3,
+       0.4,
+       0.5,
+       0.6,
+       0.7,
+       0.8,
+       0.9,
+       1.0
+      ],
+      "incremental_per_customer": [
+       0.0,
+       0.008,
+       0.0146,
+       0.0178,
+       0.0221,
+       0.022,
+       0.0215,
+       0.0166,
+       0.0174,
+       0.0165,
+       0.0075
+      ]
+     }
+    }
+   },
+   "pehe": {
+    "all": 0.5784,
+    "arm1": 0.5808,
+    "arm2": 0.576
+   }
+  }
+ },
+ "policy": {
+  "0.1": {
+   "t": {
+    "contact_rate": 0.1,
+    "arm_mix": {
+     "control": 0.9,
+     "arm1": 0.0897,
+     "arm2": 0.0103
+    },
+    "aipw_per_1000_customers": {
+     "value": 6.2976,
+     "lo": -4.0798,
+     "hi": 15.6202
+    },
+    "aipw_per_1000_contacts": {
+     "value": 62.9764,
+     "lo": -41.5923,
+     "hi": 153.7697
+    },
+    "ipw_per_1000_contacts": {
+     "value": 30.0,
+     "lo": -66.4762,
+     "hi": 101.1983
+    },
+    "aipw_gain_vs_random_per_1000_customers": {
+     "value": 3.7968,
+     "lo": -4.8408,
+     "hi": 14.8605
+    }
+   },
+   "forest-ed": {
+    "contact_rate": 0.1,
+    "arm_mix": {
+     "control": 0.9,
+     "arm1": 0.1,
+     "arm2": 0.0
+    },
+    "aipw_per_1000_customers": {
+     "value": 15.1679,
+     "lo": 6.2789,
+     "hi": 23.2831
+    },
+    "aipw_per_1000_contacts": {
+     "value": 151.6791,
+     "lo": 67.2498,
+     "hi": 227.0371
+    },
+    "ipw_per_1000_contacts": {
+     "value": 50.0,
+     "lo": -73.8251,
+     "hi": 125.8087
+    },
+    "aipw_gain_vs_random_per_1000_customers": {
+     "value": 12.6671,
+     "lo": 3.3294,
+     "hi": 20.9585
+    }
+   },
+   "response": {
+    "contact_rate": 0.1,
+    "arm_mix": {
+     "control": 0.9,
+     "arm1": 0.0,
+     "arm2": 0.1
+    },
+    "aipw_per_1000_customers": {
+     "value": 4.5083,
+     "lo": -6.6143,
+     "hi": 14.7936
+    },
+    "aipw_per_1000_contacts": {
+     "value": 45.0831,
+     "lo": -65.6525,
+     "hi": 152.5777
+    },
+    "ipw_per_1000_contacts": {
+     "value": 50.0,
+     "lo": -166.1259,
+     "hi": 213.9702
+    },
+    "aipw_gain_vs_random_per_1000_customers": {
+     "value": 2.0075,
+     "lo": -9.5756,
+     "hi": 12.9359
+    }
+   },
+   "random targeting": {
+    "contact_rate": 0.1,
+    "arm_mix": {
+     "control": 0.9,
+     "arm1": 0.05,
+     "arm2": 0.05
+    },
+    "aipw_per_1000_customers": {
+     "value": 2.5008,
+     "lo": -0.08,
+     "hi": 5.6538
+    },
+    "aipw_per_1000_contacts": {
+     "value": 25.0081,
+     "lo": -0.7999,
+     "hi": 56.5377
+    },
+    "ipw_per_1000_contacts": {
+     "value": 25.5,
+     "lo": -15.1625,
+     "hi": 58.55
+    },
+    "aipw_gain_vs_random_per_1000_customers": {
+     "value": 0.0,
+     "lo": 0.0,
+     "hi": 0.0
+    }
+   }
+  },
+  "0.3": {
+   "t": {
+    "contact_rate": 0.3,
+    "arm_mix": {
+     "control": 0.7,
+     "arm1": 0.2883,
+     "arm2": 0.0117
+    },
+    "aipw_per_1000_customers": {
+     "value": 35.7718,
+     "lo": 16.0106,
+     "hi": 57.4277
+    },
+    "aipw_per_1000_contacts": {
+     "value": 119.2395,
+     "lo": 54.0581,
+     "hi": 191.6761
+    },
+    "ipw_per_1000_contacts": {
+     "value": 106.6667,
+     "lo": 64.6188,
+     "hi": 164.6388
+    },
+    "aipw_gain_vs_random_per_1000_customers": {
+     "value": 28.2694,
+     "lo": 13.2173,
+     "hi": 47.739
+    }
+   },
+   "forest-ed": {
+    "contact_rate": 0.3,
+    "arm_mix": {
+     "control": 0.7,
+     "arm1": 0.2967,
+     "arm2": 0.0033
+    },
+    "aipw_per_1000_customers": {
+     "value": 34.7127,
+     "lo": 15.8967,
+     "hi": 50.9617
+    },
+    "aipw_per_1000_contacts": {
+     "value": 115.709,
+     "lo": 52.4509,
+     "hi": 172.6433
+    },
+    "ipw_per_1000_contacts": {
+     "value": 76.6667,
+     "lo": 18.9737,
+     "hi": 133.4294
+    },
+    "aipw_gain_vs_random_per_1000_customers": {
+     "value": 27.2103,
+     "lo": 10.2443,
+     "hi": 38.2701
+    }
+   },
+   "response": {
+    "contact_rate": 0.3,
+    "arm_mix": {
+     "control": 0.7,
+     "arm1": 0.0,
+     "arm2": 0.3
+    },
+    "aipw_per_1000_customers": {
+     "value": 5.6107,
+     "lo": -17.8444,
+     "hi": 29.3185
+    },
+    "aipw_per_1000_contacts": {
+     "value": 18.7023,
+     "lo": -58.3753,
+     "hi": 99.7652
+    },
+    "ipw_per_1000_contacts": {
+     "value": 46.6667,
+     "lo": -51.058,
+     "hi": 142.3493
+    },
+    "aipw_gain_vs_random_per_1000_customers": {
+     "value": -1.8917,
+     "lo": -23.0037,
+     "hi": 17.0021
+    }
+   },
+   "random targeting": {
+    "contact_rate": 0.3,
+    "arm_mix": {
+     "control": 0.7,
+     "arm1": 0.15,
+     "arm2": 0.15
+    },
+    "aipw_per_1000_customers": {
+     "value": 7.5024,
+     "lo": -4.7337,
+     "hi": 18.226
+    },
+    "aipw_per_1000_contacts": {
+     "value": 25.0081,
+     "lo": -15.779,
+     "hi": 60.7532
+    },
+    "ipw_per_1000_contacts": {
+     "value": 25.5,
+     "lo": -20.2625,
+     "hi": 73.175
+    },
+    "aipw_gain_vs_random_per_1000_customers": {
+     "value": 0.0,
+     "lo": 0.0,
+     "hi": 0.0
+    }
+   }
+  }
+ }
+}

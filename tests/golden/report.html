@@ -1,0 +1,45 @@
+<!doctype html><html lang=en><head><meta charset=utf-8>
+<meta name=viewport content='width=device-width,initial-scale=1'>
+<title>Uplift decision report</title><style>
+body{font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;color:#1d2125;background:#fff;
+max-width:980px;margin:2rem auto;padding:0 1rem}
+h1{font-size:1.6rem;margin-bottom:.2rem}h2{font-size:1.2rem;margin-top:2rem;border-bottom:1px solid #d6d9dc}
+.muted{color:#5c6670}.decision{border-left:4px solid #2f6f4f;background:#f3f8f5;padding:.6rem 1rem;margin:1rem 0}
+.decision.none{border-color:#8a6d1d;background:#fbf7ec}
+table{border-collapse:collapse;width:100%;margin:.6rem 0;font-variant-numeric:tabular-nums}
+th,td{border-bottom:1px solid #e3e6e8;padding:.3rem .5rem;text-align:right}
+th:first-child,td:first-child{text-align:left}th{background:#f5f6f7}
+figure{margin:1rem 0}figure svg{max-width:100%;height:auto}
+code{background:#f1f3f4;padding:0 .2rem}
+</style></head><body>
+<h1>Uplift decision report</h1>
+<p class=muted>3,000 customers, outcome <code>purchase</code>. Mean outcome by arm: control 0.3095, arm1 0.3410, arm2 0.3244.</p>
+<h2>The question</h2><p>With a contact budget, which customers should receive which message so that the number of purchases caused by the campaign is as large as possible?</p>
+<h2>Recommendation</h2><div class=decision><b>Budget 10%:</b> target with <b>forest-ed</b> (sending arm1 to 10% of customers). Estimated 151.7 incremental purchases per 1,000 contacts (95% CI 67.2 to 227.0); 12.7 more per 1,000 customers than random targeting (95% CI 3.3 to 21.0).</div><div class=decision><b>Budget 30%:</b> target with <b>t</b> (sending arm1 to 29%, arm2 to 1% of customers). Estimated 119.2 incremental purchases per 1,000 contacts (95% CI 54.1 to 191.7); 28.3 more per 1,000 customers than random targeting (95% CI 13.2 to 47.7).</div>
+<h2>Policy value by budget</h2>
+<h3>Budget: 10% of customers</h3><table><tr><th>policy</th><th>contacted</th><th>arm mix (arm1 / arm2)</th><th>incremental purchases per 1,000 contacts (AIPW)</th><th>same, IPW</th><th>per 1,000 customers (AIPW)</th><th>gain vs random per 1,000 customers</th></tr><tr><td>forest-ed</td><td>10.0%</td><td>10% / 0%</td><td>151.7 <span class=muted>[67.2, 227.0]</span></td><td>50.0</td><td>15.2 <span class=muted>[6.3, 23.3]</span></td><td>12.7 <span class=muted>[3.3, 21.0]</span></td></tr><tr><td>t</td><td>10.0%</td><td>9% / 1%</td><td>63.0 <span class=muted>[-41.6, 153.8]</span></td><td>30.0</td><td>6.3 <span class=muted>[-4.1, 15.6]</span></td><td>3.8 <span class=muted>[-4.8, 14.9]</span></td></tr><tr><td>response</td><td>10.0%</td><td>0% / 10%</td><td>45.1 <span class=muted>[-65.7, 152.6]</span></td><td>50.0</td><td>4.5 <span class=muted>[-6.6, 14.8]</span></td><td>2.0 <span class=muted>[-9.6, 12.9]</span></td></tr><tr><td>random targeting</td><td>10.0%</td><td>5% / 5%</td><td>25.0 <span class=muted>[-0.8, 56.5]</span></td><td>25.5</td><td>2.5 <span class=muted>[-0.1, 5.7]</span></td><td>0.0 <span class=muted>[0.0, 0.0]</span></td></tr></table>
+<h3>Budget: 30% of customers</h3><table><tr><th>policy</th><th>contacted</th><th>arm mix (arm1 / arm2)</th><th>incremental purchases per 1,000 contacts (AIPW)</th><th>same, IPW</th><th>per 1,000 customers (AIPW)</th><th>gain vs random per 1,000 customers</th></tr><tr><td>t</td><td>30.0%</td><td>29% / 1%</td><td>119.2 <span class=muted>[54.1, 191.7]</span></td><td>106.7</td><td>35.8 <span class=muted>[16.0, 57.4]</span></td><td>28.3 <span class=muted>[13.2, 47.7]</span></td></tr><tr><td>forest-ed</td><td>30.0%</td><td>30% / 0%</td><td>115.7 <span class=muted>[52.5, 172.6]</span></td><td>76.7</td><td>34.7 <span class=muted>[15.9, 51.0]</span></td><td>27.2 <span class=muted>[10.2, 38.3]</span></td></tr><tr><td>random targeting</td><td>30.0%</td><td>15% / 15%</td><td>25.0 <span class=muted>[-15.8, 60.8]</span></td><td>25.5</td><td>7.5 <span class=muted>[-4.7, 18.2]</span></td><td>0.0 <span class=muted>[0.0, 0.0]</span></td></tr><tr><td>response</td><td>30.0%</td><td>0% / 30%</td><td>18.7 <span class=muted>[-58.4, 99.8]</span></td><td>46.7</td><td>5.6 <span class=muted>[-17.8, 29.3]</span></td><td>-1.9 <span class=muted>[-23.0, 17.0]</span></td></tr></table>
+<h2>Ranking quality</h2><p>Normalised Qini coefficient and AUUC per treatment arm, with 95% bootstrap intervals.</p>
+<table><tr><th>learner</th><th>Qini coef. arm1</th><th>AUUC arm1</th><th>Qini coef. arm2</th><th>AUUC arm2</th><th>fit s / fold</th></tr><tr><td>t</td><td>0.097 <span class=muted>[0.049, 0.144]</span></td><td>0.095 <span class=muted>[0.051, 0.137]</span></td><td>-0.013 <span class=muted>[-0.059, 0.024]</span></td><td>-0.012 <span class=muted>[-0.056, 0.025]</span></td><td>0.10</td></tr><tr><td>forest-ed</td><td>0.080 <span class=muted>[0.034, 0.123]</span></td><td>0.084 <span class=muted>[0.039, 0.129]</span></td><td>0.033 <span class=muted>[-0.023, 0.082]</span></td><td>0.033 <span class=muted>[-0.022, 0.081]</span></td><td>0.10</td></tr><tr><td>response</td><td>-0.115 <span class=muted>[-0.152, -0.077]</span></td><td>-0.114 <span class=muted>[-0.147, -0.078]</span></td><td>-0.014 <span class=muted>[-0.059, 0.024]</span></td><td>-0.013 <span class=muted>[-0.058, 0.021]</span></td><td>0.10</td></tr><tr><td>random</td><td>0.018 <span class=muted>[-0.020, 0.062]</span></td><td>0.019 <span class=muted>[-0.017, 0.065]</span></td><td>0.095 <span class=muted>[0.055, 0.129]</span></td><td>0.092 <span class=muted>[0.053, 0.123]</span></td><td>0.10</td></tr></table>
+<figure><svg/>
+<figcaption class=muted>Held-out Qini curves.</figcaption></figure>
+<h2>Error against the known effects</h2><p>Root mean squared error between estimated and true effects (PEHE), on held-out folds.</p><table><tr><th>learner</th><th>PEHE all</th><th>PEHE arm1</th><th>PEHE arm2</th></tr><tr><td>t</td><td>0.0749</td><td>0.0779</td><td>0.0718</td></tr><tr><td>forest-ed</td><td>0.0766</td><td>0.0954</td><td>0.0514</td></tr><tr><td>response</td><td>0.3669</td><td>0.3722</td><td>0.3615</td></tr><tr><td>random</td><td>0.5784</td><td>0.5808</td><td>0.5760</td></tr></table>
+
+<h2>Appendix: how these numbers were produced</h2>
+<ul>
+<li>Rows were split into 2 folds stratified by arm and outcome. Every learner was fitted on
+1 folds and scored the remaining one, so each customer's score comes from a model that never saw them.</li>
+<li>Budgets are applied inside each held-out fold: the top share of that fold by best predicted uplift is contacted,
+each with the arm of highest predicted uplift, skipping customers whose best predicted uplift is not positive.</li>
+<li>Policy value uses inverse propensity weighting (IPW) and augmented IPW (AIPW). Propensities are known by
+design (the arm shares of a randomised test); the AIPW outcome model is a cross-fitted per-arm lightgbm model.
+Random targeting is scored in expectation over its randomisation.</li>
+<li>Intervals are 95% percentile bootstraps over customers (50 replicates). Policy comparisons resample
+all policies jointly, so the gain against random targeting is a paired estimate. Fitted models are held fixed
+across replicates, so the intervals do not include refitting variance.</li>
+<li>Assumptions: the arm was randomised (or its propensities are known), one customer's e-mail does not change
+another's outcome, and the future population resembles this one. The recommended policy is the best of several
+on the same data, so its estimate is slightly optimistic.</li>
+</ul>
+
+</body></html>
