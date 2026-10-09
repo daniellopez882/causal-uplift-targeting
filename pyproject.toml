@@ -1,0 +1,50 @@
+[project]
+name = "causal-uplift-targeting"
+version = "0.1.0"
+description = "Uplift meta-learners and honest uplift forests for choosing who to contact under a budget, with Qini/AUUC and doubly robust policy value."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Daniel Lopez" }]
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "lightgbm>=4.5",
+    "matplotlib>=3.9",
+    "numba>=0.61",
+    "numpy>=2.0",
+    "polars>=1.20",
+    "scikit-learn>=1.5",
+]
+
+[project.scripts]
+uplift = "causal_uplift.cli:main"
+
+[dependency-groups]
+dev = [
+    "hypothesis>=6.100",
+    "pytest>=8.3",
+    "ruff>=0.8",
+    "scikit-uplift==0.5.1",
+]
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/causal_uplift"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP", "SIM", "RUF", "N", "PT", "C4"]
+# X, Xb, Xs follow the usual matrix naming in ML code.
+ignore = ["N803", "N806"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = ["integration: needs a downloaded dataset; skipped when it is absent"]
+filterwarnings = ["ignore:Function stable_cumsum is deprecated:FutureWarning"]

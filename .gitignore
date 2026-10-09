@@ -1,0 +1,28 @@
+# environments and caches
+.venv/
+__pycache__/
+*.py[cod]
+*.nbi
+*.nbc
+.pytest_cache/
+.ruff_cache/
+.hypothesis/
+.mypy_cache/
+build/
+dist/
+*.egg-info/
+
+# data, fitted models and run outputs never go in git
+data/
+models/
+out/
+*.parquet
+*.csv
+*.csv.gz
+*.pkl
+bench/results/smoke-*.json
+
+# local tooling
+.env
+.idea/
+.vscode/
