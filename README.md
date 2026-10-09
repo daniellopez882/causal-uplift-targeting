@@ -112,9 +112,11 @@ Tests: `uv run pytest` (no network, no downloads; tests on the real file skip if
 ## Ranking quality on Hillstrom
 
 Normalised Qini coefficient and AUUC (scikit-uplift's definitions) per e-mail against no e-mail,
-on held-out folds, with 95% bootstrap intervals, and mean fit time per fold.
+on held-out folds, with 95% bootstrap intervals, and the median fit time per fold on about 51,000
+training rows. Every learner is fitted once on a small synthetic sample before timing starts, so
+numba compilation and LightGBM thread start-up are not counted.
 
-| learner | Qini, Mens e-mail | Qini, Womens e-mail | AUUC, Mens e-mail | AUUC, Womens e-mail | fit s / fold |
+| learner | Qini, Mens e-mail | Qini, Womens e-mail | AUUC, Mens e-mail | AUUC, Womens e-mail | median fit s / fold |
 |---|---|---|---|---|---|
 | S-learner | pending benchmark | pending benchmark | pending benchmark | pending benchmark | pending benchmark |
 | T-learner | pending benchmark | pending benchmark | pending benchmark | pending benchmark | pending benchmark |

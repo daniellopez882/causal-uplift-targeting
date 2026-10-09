@@ -87,6 +87,18 @@ def _write(path: Path, payload: dict[str, Any]) -> None:
     log(f"wrote {path}")
 
 
+def warm_up(base: BaseLearner, trees: int) -> None:
+    """Fit every learner once on a small synthetic sample before anything is timed.
+
+    The first fit in a process pays for numba compilation (or loading its cache) and for
+    starting LightGBM's OpenMP thread pool; without this the first fold of the first learner
+    absorbs those one-off costs.
+    """
+    data = make_synthetic("step", 2_000, seed=0)
+    for factory in _factories(base, trees).values():
+        factory(0).fit(data.X, data.arm, data.y, len(data.arm_names))
+
+
 def run_experiment(name: str, data: UpliftData, profile: Profile, base: BaseLearner, command: str, out: Path) -> None:
     start = time.perf_counter()
     results = evaluate(
@@ -198,6 +210,8 @@ def main(argv: list[str] | None = None) -> int:
     profile = PROFILES[args.profile]
     command = "uv run python bench/run.py " + shlex.join(argv if argv is not None else sys.argv[1:])
     base = BaseLearner(n_jobs=args.n_jobs)
+    log("warming up learners (not timed)")
+    warm_up(base, trees=5)
     out_dir = Path(args.out_dir)
     prefix = "smoke-" if args.profile == "smoke" else ""
     start = time.perf_counter()

@@ -50,13 +50,13 @@ def policy_table(result: dict[str, Any]) -> str:
 
 def ranking_table(result: dict[str, Any]) -> str:
     arms = result["dataset"]["arms"][1:]
-    header = "| learner | " + " | ".join(f"Qini coef. {a} | AUUC {a}" for a in arms) + " | fit s / fold |"
+    header = "| learner | " + " | ".join(f"Qini coef. {a} | AUUC {a}" for a in arms) + " | fit s / fold (median) |"
     lines = [header, "|---" * (2 * len(arms) + 2) + "|"]
     for name, entry in result["learners"].items():
         cells = " | ".join(
             f"{_ci(entry['ranking'][a]['qini'], 3)} | {_ci(entry['ranking'][a]['auuc'], 3)}" for a in arms
         )
-        lines.append(f"| {name} | {cells} | {entry['fit_seconds_mean']:.2f} |")
+        lines.append(f"| {name} | {cells} | {entry['fit_seconds_median']:.2f} |")
     return "\n".join(lines)
 
 

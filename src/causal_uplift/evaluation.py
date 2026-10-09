@@ -195,6 +195,7 @@ def evaluate(
         entry: dict[str, Any] = {
             "fit_seconds_per_fold": [round(s, 4) for s in fitted.fit_seconds],
             "fit_seconds_mean": float(np.mean(fitted.fit_seconds)),
+            "fit_seconds_median": float(np.median(fitted.fit_seconds)),
             "predict_seconds_mean": float(np.mean(fitted.predict_seconds)),
             "ranking": ranking_metrics(data, fitted.cate, n_boot=n_boot, seed=seed),
         }
