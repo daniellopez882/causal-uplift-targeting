@@ -59,8 +59,18 @@ def test_cli_policy_end_to_end(tmp_path: Path, capsys: pytest.CaptureFixture[str
     assert set(results) == {"dataset", "settings", "learners", "policy"}
     assert set(results["policy"]["0.2"]) == {"t", "forest-ed", "response", "random targeting"}
     assert "pehe" in results["learners"]["t"]  # the synthetic file carries the true effects
+    assert results["settings"]["ci_level"] == 0.95
+    assert sum(results["settings"]["train_rows_per_fold"]) == 2400  # two folds: each row trains once
     policy = results["policy"]["0.2"]["t"]
     assert policy["contact_rate"] <= 0.2 + 1e-9
+    response = results["policy"]["0.2"]["response"]
+    assert response["aipw_gain_vs_response_per_1000_customers"] == {"value": 0.0, "lo": 0.0, "hi": 0.0}
+    # Both gains are paired differences of the same AIPW scores, so they differ by the response gain.
+    via_random = (
+        policy["aipw_gain_vs_random_per_1000_customers"]["value"]
+        - response["aipw_gain_vs_random_per_1000_customers"]["value"]
+    )
+    assert policy["aipw_gain_vs_response_per_1000_customers"]["value"] == pytest.approx(via_random, abs=1e-9)
     assert "Recommendation" in (tmp_path / "p.html").read_text(encoding="utf-8")
 
 

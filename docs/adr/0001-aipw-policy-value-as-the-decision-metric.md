@@ -25,6 +25,10 @@ off-policy estimators unbiased without modelling assignment.
 * Confidence intervals are percentile bootstraps over customers that resample all policies jointly.
   The comparison with random targeting is therefore a paired difference with its own interval, and
   the report only recommends model-based targeting when that interval excludes zero.
+* When the response model is among the evaluated learners, every policy also gets a paired AIPW
+  difference against the response model's policy at the same budget. Beating random targeting
+  shows that a ranking helps; only this second difference shows whether modelling the effect
+  helped more than modelling the outcome. It is reported, not used by the decision rule.
 * Qini coefficient and AUUC stay in the report as ranking diagnostics, with the same bootstrap.
 
 ## Consequences

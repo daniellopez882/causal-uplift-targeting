@@ -24,6 +24,8 @@ from causal_uplift.policy import allocate
 
 LearnerFactory = Callable[[int], CateLearner]
 RANDOM_POLICY = "random targeting"
+RESPONSE_POLICY = "response"
+CI_LEVEL = 0.95
 
 
 @dataclass
@@ -65,7 +67,7 @@ def pehe(true_cate: np.ndarray, cate: np.ndarray, treatment_names: Sequence[str]
 
 
 def ranking_metrics(
-    data: UpliftData, cate: np.ndarray, *, n_boot: int, seed: int, curve_points: int = 51
+    data: UpliftData, cate: np.ndarray, *, n_boot: int, seed: int, level: float = CI_LEVEL, curve_points: int = 51
 ) -> dict[str, Any]:
     """Per treatment arm: Qini coefficient and AUUC with bootstrap intervals, plus a Qini curve."""
     out: dict[str, Any] = {}
@@ -74,7 +76,7 @@ def ranking_metrics(
         y = data.y[rows]
         treated = (data.arm[rows] == k).astype(np.float64)
         score = cate[rows, k - 1]
-        intervals = RankingBootstrap(y, score, treated).run(n_boot, seed + k)
+        intervals = RankingBootstrap(y, score, treated).run(n_boot, seed + k, level)
         curve = qini_curve(y, score, treated).resample(curve_points)
         out[arm_name] = {
             "qini": intervals["qini"].to_dict(),
@@ -104,12 +106,16 @@ def policy_metrics(
     costs: np.ndarray | None,
     n_boot: int,
     seed: int,
+    level: float = CI_LEVEL,
 ) -> dict[str, Any]:
     """AIPW and IPW value of each learner's budgeted policy, per 1,000 customers and per 1,000 contacts.
 
     Budgets are a share of customers when costs are 1 (the default); with costs the budget
     is ``share * n`` cost units. ``random targeting`` is scored in expectation over its
-    randomisation, and every policy also gets a paired AIPW difference against it.
+    randomisation, and every policy gets a paired AIPW difference against it. When a
+    ``response`` learner was evaluated, every policy also gets a paired difference against the
+    response model's policy: that is the comparison that says whether modelling the effect
+    beat modelling the outcome.
     """
     n_arms = len(data.arm_names)
     propensity = data.design_propensity()
@@ -124,31 +130,40 @@ def policy_metrics(
         mean_cost = 1.0 if costs is None else float(np.mean(costs))
         policies[RANDOM_POLICY] = random_policy(data.n, n_arms, min(1.0, budget / mean_cost))
         names = list(policies)
+        references = {"random": RANDOM_POLICY}
+        if RESPONSE_POLICY in policies:
+            references["response"] = RESPONSE_POLICY
+        value = {name: np.sum(pi * gamma_aipw, axis=1) for name, pi in policies.items()}
         ones = np.ones(data.n)
         numerators: list[np.ndarray] = []
         denominators: list[np.ndarray] = []
-        reference = np.sum(policies[RANDOM_POLICY] * gamma_aipw, axis=1)
         for name in names:
             pi = policies[name]
             contact = 1.0 - pi[:, 0]
-            aipw_lift = np.sum(pi * gamma_aipw, axis=1) - gamma_aipw[:, 0]
+            aipw_lift = value[name] - gamma_aipw[:, 0]
             ipw_lift = np.sum(pi * gamma_ipw, axis=1) - gamma_ipw[:, 0]
-            gain = np.sum(pi * gamma_aipw, axis=1) - reference
-            numerators += [1000 * aipw_lift, 1000 * aipw_lift, 1000 * ipw_lift, 1000 * gain]
-            denominators += [ones, contact, contact, ones]
-        intervals = bootstrap_ratios(np.column_stack(numerators), np.column_stack(denominators), n_boot, seed + b)
+            numerators += [1000 * aipw_lift, 1000 * aipw_lift, 1000 * ipw_lift]
+            denominators += [ones, contact, contact]
+            for reference in references.values():
+                numerators.append(1000 * (value[name] - value[reference]))
+                denominators.append(ones)
+        intervals = bootstrap_ratios(
+            np.column_stack(numerators), np.column_stack(denominators), n_boot, seed + b, level
+        )
+        width = 3 + len(references)
         per_budget: dict[str, Any] = {}
         for j, name in enumerate(names):
             pi = policies[name]
-            block: list[Interval] = intervals[4 * j : 4 * j + 4]
+            block: list[Interval] = intervals[width * j : width * (j + 1)]
             per_budget[name] = {
                 "contact_rate": float(np.mean(1.0 - pi[:, 0])),
                 "arm_mix": {arm: float(pi[:, a].mean()) for a, arm in enumerate(data.arm_names)},
                 "aipw_per_1000_customers": block[0].to_dict(),
                 "aipw_per_1000_contacts": block[1].to_dict(),
                 "ipw_per_1000_contacts": block[2].to_dict(),
-                "aipw_gain_vs_random_per_1000_customers": block[3].to_dict(),
             }
+            for label, interval in zip(references, block[3:], strict=True):
+                per_budget[name][f"aipw_gain_vs_{label}_per_1000_customers"] = interval.to_dict()
         out[f"{budget:g}"] = per_budget
     return out
 
@@ -177,6 +192,7 @@ def evaluate(
     seed: int = 0,
     budgets: Sequence[float] | None = None,
     costs: np.ndarray | None = None,
+    level: float = CI_LEVEL,
     progress: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     """Cross-fit every learner and collect the metrics into a JSON-ready dict."""
@@ -184,7 +200,14 @@ def evaluate(
     fold = stratified_folds(experiment_strata(data.arm, data.y), n_folds, seed)
     results: dict[str, Any] = {
         "dataset": describe(data),
-        "settings": {"folds": n_folds, "n_boot": n_boot, "seed": seed, "base": base.to_dict()},
+        "settings": {
+            "folds": n_folds,
+            "train_rows_per_fold": [int(np.sum(fold != k)) for k in range(n_folds)],
+            "n_boot": n_boot,
+            "ci_level": level,
+            "seed": seed,
+            "base": base.to_dict(),
+        },
         "learners": {},
     }
     cates: dict[str, np.ndarray] = {}
@@ -197,7 +220,7 @@ def evaluate(
             "fit_seconds_mean": float(np.mean(fitted.fit_seconds)),
             "fit_seconds_median": float(np.median(fitted.fit_seconds)),
             "predict_seconds_mean": float(np.mean(fitted.predict_seconds)),
-            "ranking": ranking_metrics(data, fitted.cate, n_boot=n_boot, seed=seed),
+            "ranking": ranking_metrics(data, fitted.cate, n_boot=n_boot, seed=seed, level=level),
         }
         if data.true_cate is not None:
             entry["pehe"] = pehe(data.true_cate, fitted.cate, data.arm_names[1:])
@@ -209,6 +232,6 @@ def evaluate(
         results["settings"]["costs"] = None if costs is None else np.asarray(costs).tolist()
         say("scoring budgeted policies")
         results["policy"] = policy_metrics(
-            data, cates, mu, fold, budgets=budgets, costs=costs, n_boot=n_boot, seed=seed
+            data, cates, mu, fold, budgets=budgets, costs=costs, n_boot=n_boot, seed=seed, level=level
         )
     return results
