@@ -38,6 +38,9 @@ packages = ["src/causal_uplift"]
 line-length = 120
 target-version = "py312"
 
+[tool.ruff.format]
+line-ending = "lf"
+
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "B", "UP", "SIM", "RUF", "N", "PT", "C4"]
 # X, Xb, Xs follow the usual matrix naming in ML code.
