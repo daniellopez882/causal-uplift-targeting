@@ -1,0 +1,44 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install locked environment
+        run: uv sync --locked
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Format
+        run: uv run ruff format --check .
+
+      - name: Tests (default suite, no downloads)
+        run: uv run pytest -q
+
+      - name: Build image
+        run: docker build -t causal-uplift-targeting:ci .
+
+      - name: Smoke-run image
+        run: |
+          docker run --rm causal-uplift-targeting:ci --version
+          docker run --rm causal-uplift-targeting:ci policy \
+            --data synthetic:sleeping_dogs --rows 4000 \
+            --learners t,dr,forest-ed,response,random --folds 2 --n-boot 50 \
+            --budget 0.2 --json /tmp/policy.json --report /tmp/policy.html
