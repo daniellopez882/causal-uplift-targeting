@@ -22,10 +22,8 @@ def experiments(draw: st.DrawFn, min_size: int = 6, max_size: int = 60) -> tuple
     rng = np.random.default_rng(seed)
     treated = rng.permutation(np.arange(n) % 2).astype(float)
     y = (rng.random(n) < rng.uniform(0.2, 0.8)).astype(float)
-    if draw(st.booleans()):
-        score = rng.integers(0, 4, n).astype(float)  # heavy ties
-    else:
-        score = rng.normal(size=n)
+    heavy_ties = draw(st.booleans())
+    score = rng.integers(0, 4, n).astype(float) if heavy_ties else rng.normal(size=n)
     return y, score, treated
 
 

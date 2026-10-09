@@ -43,7 +43,7 @@ def allocate(
 ) -> Allocation:
     """Optimise the assignment for ``benefit`` (n, K), e.g. predicted uplift times value."""
     benefit = np.asarray(benefit, dtype=np.float64)
-    n, k = benefit.shape
+    k = benefit.shape[1]
     cost = np.ones(k) if costs is None else np.asarray(costs, dtype=np.float64)
     if cost.shape != (k,) or (cost <= 0).any():
         raise ValueError("costs must be positive, one per treatment")
