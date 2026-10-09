@@ -119,7 +119,9 @@ def cmd_fetch(args: argparse.Namespace) -> int:
         _log(str(err))
         return 1
     source = SOURCES[args.name]
-    print(f"{args.name}: {path} (sha256 {source.sha256[:12]}..., licence: {source.licence})")
+    print(f"{args.name}: {path} ({source.size_bytes:,} bytes, sha256 {source.sha256[:12]}...)")
+    print(f"  checksum: {source.sha256_origin}")
+    print(f"  licence: {source.licence}")
     return 0
 
 
@@ -136,7 +138,13 @@ def cmd_fit(args: argparse.Namespace) -> int:
     learner = make_learner(args.learner, _config(args, args.seed))
     _log(f"fitting {args.learner} on {data.n} rows")
     learner.fit(data.X, data.arm, data.y, len(data.arm_names))
-    meta = {"outcome": data.outcome, "rows": data.n, "data": args.data, "config": _config(args, args.seed).to_dict()}
+    meta = {
+        "learner": args.learner,
+        "outcome": data.outcome,
+        "rows": data.n,
+        "data": args.data,
+        "config": _config(args, args.seed).to_dict(),
+    }
     save_model(Path(args.out), learner, spec, data.arm_names, meta)
     print(f"saved {args.learner} model to {args.out}")
     return 0

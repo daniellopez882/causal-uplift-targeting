@@ -33,11 +33,10 @@ from causal_uplift.fetch import local_path
 from causal_uplift.forest import UpliftForest
 from causal_uplift.learners import CateLearner
 from causal_uplift.metrics import qini_coefficient
-from causal_uplift.registry import LearnerConfig, make_learner
+from causal_uplift.registry import BASELINES, LearnerConfig, make_learner
 from causal_uplift.synthetic import SCENARIOS, make_synthetic
 
 UPLIFT_LEARNERS = ("s", "t", "x", "r", "dr", "forest-kl", "forest-ed")
-BASELINES = ("response", "random")
 BUDGETS = (0.1, 0.2, 0.3)
 
 

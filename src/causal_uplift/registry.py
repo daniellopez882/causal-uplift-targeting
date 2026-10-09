@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from causal_uplift.base import BaseLearner, PropensityKind
-from causal_uplift.forest import UpliftForest
+from causal_uplift.forest import Criterion, UpliftForest
 from causal_uplift.learners import (
     CateLearner,
     DRLearner,
@@ -48,8 +48,9 @@ def make_learner(name: str, config: LearnerConfig | None = None) -> CateLearner:
         case "dr":
             return DRLearner(base, cfg.propensity, seed=cfg.seed)
         case "forest-kl" | "forest-ed":
+            criterion: Criterion = "kl" if name == "forest-kl" else "ed"
             options = {"n_jobs": base.n_jobs, **cfg.forest}
-            return UpliftForest(name.removeprefix("forest-"), seed=cfg.seed, **options)  # type: ignore[arg-type]
+            return UpliftForest(criterion, seed=cfg.seed, **options)
         case "response":
             return ResponseModel(base)
         case "random":

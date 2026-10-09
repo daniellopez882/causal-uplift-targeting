@@ -47,7 +47,7 @@ def _ram_gb() -> float:
 
         status = MemoryStatus()
         status.dwLength = ctypes.sizeof(MemoryStatus)
-        ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status))  # type: ignore[attr-defined]
+        ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status))
         return round(status.ullTotalPhys / 2**30, 1)
     meminfo = Path("/proc/meminfo")
     if meminfo.exists():
