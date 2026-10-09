@@ -16,7 +16,7 @@ import shlex
 import sys
 import time
 from collections.abc import Callable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -61,7 +61,7 @@ PROFILES = {
     ),
     "smoke": Profile("smoke", ("visit",), 6_000, 2, 50, 20, ("step", "sleeping_dogs"), 3_000, 2_000, (100,), 50_000),
 }
-PROFILES["criteo"] = PROFILES["full"]
+PROFILES["criteo"] = replace(PROFILES["full"], name="criteo")
 
 
 def log(message: str) -> None:
