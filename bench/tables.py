@@ -103,15 +103,16 @@ def best_from_scratch(result: dict[str, Any], budget: str) -> str:
 
 
 def memo_policy_table(result: dict[str, Any], digits: int = 2) -> str:
-    """Per budget: the best uplift learner of this package, the baselines and the no-model policies."""
+    """Per budget: the best uplift learner of this package, the response model and the no-model policies.
+
+    The scikit-uplift two-model rows are left to the full table: they repeat the T-learner's.
+    """
     lines = _policy_header(result)
     for budget, policies in result["policy"].items():
         best = best_from_scratch(result, budget)
         rows = [(best, f"best uplift learner: {label(best)}")]
         rows += [
-            (n, label(n, result, budget))
-            for n in (RESPONSE_POLICY, SKLIFT, BEST_ARM_POLICY, RANDOM_POLICY)
-            if n in policies
+            (n, label(n, result, budget)) for n in (RESPONSE_POLICY, BEST_ARM_POLICY, RANDOM_POLICY) if n in policies
         ]
         lines += [_policy_row(result, budget, name, shown, digits) for name, shown in rows]
     return "\n".join(lines)
