@@ -7,8 +7,9 @@ and AUUC metrics, the IPW/AIPW policy evaluation and the budget optimiser are im
 repository; LightGBM and scikit-learn serve as base learners, and scikit-uplift is used only as a
 parity reference and a baseline.
 
-Every number below is copied from `bench/results/*.json` (printed by `bench/tables.py`); each file
-records the machine, date, git commit and command that produced it.
+No figure in this memo was typed in: `bench/tables.py` prints every table from the JSON files in
+`bench/results/`, and those files say which machine, commit and command produced them (summarised
+under [Run details](#run-details)).
 
 ## The question
 
@@ -25,77 +26,118 @@ The memo answers one question about the next campaign:
 
 "Extra" means caused by the e-mail: conversions the customer would not have made without it. A
 model that predicts who is likely to buy answers a different question, and the benchmark includes
-one (the response model) to show the difference.
+one (the response model) to show the difference. "Choosing customers at random" has two versions
+here, and both are scored: **random targeting** sends a random e-mail to a random share of
+customers, and **best single e-mail at random** sends everyone in that random share the e-mail with
+the larger average effect (the Mens e-mail at every budget).
 
 ## Policy value by budget
 
 Incremental conversions per 1,000 contacts, estimated with cross-fitted AIPW (5 folds), with 95%
 bootstrap intervals over customers (1,000 replicates). The IPW column is the same quantity without
-an outcome model. The two gain columns are paired AIPW differences per 1,000 customers in the base:
-against contacting the same share at random with a random e-mail, and against ranking by the
-response model. "Best uplift learner" is the highest AIPW value among the seven learners
-implemented here, picked after seeing these results.
+an outcome model. The three gain columns are paired AIPW differences per 1,000 customers in the
+base, against the two no-model policies and against ranking by the response model. "Best uplift
+learner" is the highest AIPW value among the seven learners implemented here, picked after seeing
+these results.
 
-| budget | policy | share e-mailed (Mens / Womens) | incremental conversions per 1,000 contacts, AIPW [95% CI] | same, IPW | gain vs random targeting per 1,000 customers [95% CI] | gain vs response model per 1,000 customers [95% CI] |
-|---|---|---|---|---|---|---|
-| 10% | best uplift learner: T-learner | 7% / 3% | 9.6 [2.4, 16.8] | 9.4 | 0.46 [-0.21, 1.18] | -0.01 [-0.58, 0.56] |
-| 10% | response model | 7% / 3% | 9.7 [2.3, 17.9] | 9.4 | 0.48 [-0.25, 1.27] | reference |
-| 10% | scikit-uplift two-model | 7% / 3% | 9.6 [2.4, 16.8] | 9.4 | 0.46 [-0.21, 1.18] | -0.01 [-0.58, 0.56] |
-| 10% | random targeting | 5% / 5% | 4.9 [3.6, 6.3] | 5.0 | reference | -0.48 [-1.27, 0.25] |
-| 20% | best uplift learner: T-learner | 14% / 6% | 9.3 [4.6, 14.1] | 9.6 | 0.87 [0.06, 1.76] | 0.33 [-0.46, 1.06] |
-| 20% | response model | 15% / 5% | 7.6 [2.6, 12.8] | 7.7 | 0.54 [-0.37, 1.47] | reference |
-| 20% | scikit-uplift two-model | 14% / 6% | 9.3 [4.6, 14.1] | 9.6 | 0.87 [0.06, 1.76] | 0.33 [-0.46, 1.06] |
-| 20% | random targeting | 10% / 10% | 4.9 [3.4, 6.3] | 5.0 | reference | -0.54 [-1.47, 0.37] |
-| 30% | best uplift learner: X-learner | 22% / 8% | 9.8 [6.1, 13.5] | 9.8 | 1.45 [0.52, 2.43] | 0.52 [-0.23, 1.34] |
-| 30% | response model | 22% / 8% | 8.0 [4.1, 11.7] | 8.1 | 0.92 [0.00, 1.84] | reference |
-| 30% | scikit-uplift two-model | 21% / 9% | 8.3 [4.6, 12.3] | 8.6 | 1.02 [0.11, 2.04] | 0.10 [-0.64, 0.81] |
-| 30% | random targeting | 15% / 15% | 4.9 [3.4, 6.3] | 5.0 | reference | -0.92 [-1.84, -0.00] |
+| budget | policy | share e-mailed (Mens / Womens) | incremental conversions per 1,000 contacts, AIPW [95% CI] | same, IPW | gain vs random targeting [95% CI] | gain vs best single e-mail at random [95% CI] | gain vs response model [95% CI] |
+|---|---|---|---|---|---|---|---|
+| 10% | best uplift learner: T-learner | 7% / 3% | 9.6 [2.4, 16.8] | 9.4 | 0.46 [-0.21, 1.18] | 0.28 [-0.39, 1.01] | -0.01 [-0.58, 0.56] |
+| 10% | response model | 7% / 3% | 9.7 [2.3, 17.9] | 9.4 | 0.48 [-0.25, 1.27] | 0.30 [-0.42, 1.11] | reference |
+| 10% | best single e-mail at random (Mens) | 10% / 0% | 6.7 [4.9, 8.6] | 6.8 | 0.18 [0.08, 0.28] | reference | -0.30 [-1.11, 0.42] |
+| 10% | random targeting | 5% / 5% | 4.9 [3.6, 6.3] | 5.0 | reference | -0.18 [-0.28, -0.08] | -0.48 [-1.27, 0.25] |
+| 20% | best uplift learner: T-learner | 14% / 6% | 9.3 [4.6, 14.1] | 9.6 | 0.87 [0.06, 1.76] | 0.51 [-0.34, 1.42] | 0.33 [-0.46, 1.06] |
+| 20% | response model | 15% / 5% | 7.6 [2.6, 12.8] | 7.7 | 0.54 [-0.37, 1.47] | 0.18 [-0.73, 1.10] | reference |
+| 20% | best single e-mail at random (Mens) | 20% / 0% | 6.7 [4.9, 8.5] | 6.8 | 0.36 [0.17, 0.55] | reference | -0.18 [-1.10, 0.73] |
+| 20% | random targeting | 10% / 10% | 4.9 [3.4, 6.3] | 5.0 | reference | -0.36 [-0.55, -0.17] | -0.54 [-1.47, 0.37] |
+| 30% | best uplift learner: X-learner | 22% / 8% | 9.8 [6.1, 13.5] | 9.8 | 1.45 [0.52, 2.43] | 0.91 [0.01, 1.84] | 0.52 [-0.23, 1.34] |
+| 30% | response model | 22% / 8% | 8.0 [4.1, 11.7] | 8.1 | 0.92 [0.00, 1.84] | 0.38 [-0.59, 1.29] | reference |
+| 30% | best single e-mail at random (Mens) | 30% / 0% | 6.7 [4.8, 8.6] | 6.8 | 0.54 [0.24, 0.86] | reference | -0.38 [-1.29, 0.59] |
+| 30% | random targeting | 15% / 15% | 4.9 [3.4, 6.3] | 5.0 | reference | -0.54 [-0.86, -0.24] | -0.92 [-1.84, -0.00] |
 
-The T-learner and the scikit-uplift two-model approach give identical rows because they are the
-same estimator on the same LightGBM settings and folds; the tests check that parity. All seven
-learners and every budget are in [Appendix D](#appendix-d-all-policies-and-site-visits), together
-with the same tables for site visits.
+The scikit-uplift two-model baseline is not repeated here because its policy is the T-learner's
+at every budget: they are the same estimator on the same LightGBM settings and folds, and the tests
+check that parity. All nine learner policies and every budget, the two-model rows included, are in
+[Appendix D](#appendix-d-all-policies-and-site-visits), together with the decision and policy
+tables for site visits.
 
-Measured on: Intel Core i5-8500 (6 cores), 12 GB RAM (11.9 GB visible to the OS), Windows 10
-(10.0.19045), Python 3.12.14, CPU only; numpy 2.5.3, LightGBM 4.7.0, scikit-learn 1.9.1, numba
-0.68.0, scikit-uplift 0.5.1. Date 2026-10-09, commit `2b93f0b`, command
-`uv run python bench/run.py --profile full`. Wall time 151.6 s for the conversion suite, 188.9 s for
-site visits and 56.5 s for the synthetic suite.
+### Run details
+
+| run detail | value |
+|---|---|
+| Measured on | Intel Core i5-8500, 6 cores, 12 GB RAM (11.9 GB usable), Windows 10 (10.0.19045), CPU only |
+| software | Python 3.12.14; numpy 2.5.3, polars 2.0.0, lightgbm 4.7.0, scikit-learn 1.9.1, numba 0.68.0, scikit-uplift 0.5.1 |
+| policy values and ranking (`hillstrom_conversion.json`) | 2026-10-10, commit `c376dec`, `uv run python bench/run.py --profile full --suite hillstrom`, wall time 205.0 s |
+| fit times (`2026-10-09/hillstrom_conversion.json`) | 2026-10-09, commit `2b93f0b`, `uv run python bench/run.py --profile full`, wall time 151.6 s |
+| policy values and ranking (`hillstrom_visit.json`) | 2026-10-10, commit `c376dec`, `uv run python bench/run.py --profile full --suite hillstrom`, wall time 226.6 s |
+| fit times (`2026-10-09/hillstrom_visit.json`) | 2026-10-09, commit `2b93f0b`, `uv run python bench/run.py --profile full`, wall time 188.9 s |
+| synthetic suite (`synthetic.json`) | 2026-10-09, commit `2b93f0b`, `uv run python bench/run.py --profile full`, wall time 56.5 s |
+
+The 2026-10-10 run added the simultaneous intervals and the single-e-mail reference. Its point
+estimates, percentile intervals and Qini/AUUC values match the 2026-10-09 run to within 5e-13, so
+the fit times shown in this memo are those of the first run; the second ran while other jobs were
+using the machine and its timings are not reported.
 
 ## Recommendation
 
-The rule was fixed before any result was seen and is the one the HTML report applies: at each
-budget take the policy with the highest AIPW estimate, and recommend model-based targeting only if
-its paired gain over random targeting has a 95% interval entirely above zero.
+**For conversions: no model at any of the three budgets. Send the Mens e-mail to a random 10, 20
+or 30% of customers.** For site visits, targeting does pay at 10 and 20%.
 
-* **10% budget: no model.** The highest estimate belongs to the response model, 0.48 extra
-  conversions per 1,000 customers over random targeting with an interval of [-0.25, 1.27]. That
-  includes zero, so this test does not justify paying for targeting at 10%.
-* **20% budget: target with the T-learner**, sending the Mens e-mail to 14% and the Womens e-mail
-  to 6% of customers. Estimated 9.3 incremental conversions per 1,000 contacts [4.6, 14.1] against
-  4.9 for random targeting; the paired gain is 0.87 per 1,000 customers [0.06, 1.76].
-* **30% budget: target with the X-learner**, Mens e-mail to 22% and Womens e-mail to 8%. Estimated
-  9.8 incremental conversions per 1,000 contacts [6.1, 13.5]; paired gain over random targeting
-  1.45 per 1,000 customers [0.52, 2.43].
+The rule committed before the first run (commit `6a62258`) was: at each budget take the policy with
+the highest AIPW estimate, and recommend model-based targeting if its paired gain over random
+targeting has a 95% interval entirely above zero. Reviewing the first results showed two flaws in
+it ([ADR 0005](docs/adr/0005-simultaneous-intervals-and-a-single-email-reference.md)). The winner
+is the best of nine estimates on the same customers, so its own interval is too optimistic; and
+random targeting sends the weaker Womens e-mail to half of its contacts, so beating it partly
+measures the choice of e-mail rather than the choice of customers.
+The revised rule, adopted **after** the first results were seen, asks the winner's gain to stay
+above zero on a simultaneous 95% band covering all nine learner policies (max-t bootstrap), against
+random targeting and against the best single e-mail at random. Both verdicts are shown.
+
+| budget | highest AIPW value | gain vs random targeting [95% CI] | same, simultaneous over 9 learners | gain vs best single e-mail at random [95% CI] | same, simultaneous | rule as first written | revised rule |
+|---|---|---|---|---|---|---|---|
+| 10% | response model | 0.48 [-0.25, 1.27] | 0.48 [-0.56, 1.51] | 0.30 [-0.42, 1.11] | 0.30 [-0.72, 1.31] | no model | no model |
+| 20% | T-learner | 0.87 [0.06, 1.76] | 0.87 [-0.29, 2.02] | 0.51 [-0.34, 1.42] | 0.51 [-0.67, 1.68] | target | no model |
+| 30% | X-learner | 1.45 [0.52, 2.43] | 1.45 [0.20, 2.70] | 0.91 [0.01, 1.84] | 0.91 [-0.31, 2.13] | target | no model |
+
+* **10%: no model under either rule.** The response model has the highest estimate, 0.48 extra
+  conversions per 1,000 customers over random targeting, with an interval of [-0.25, 1.27].
+* **20%: the first rule said target with the T-learner; the revised rule says no model.** The
+  T-learner's gain over random targeting, 0.87 [0.06, 1.76], loses its margin once the choice among
+  nine is allowed for ([-0.29, 2.02]). Against sending the Mens e-mail to a random 20% its gain is
+  0.51 [-0.34, 1.42] even before that allowance.
+* **30%: the first rule said target with the X-learner; the revised rule says no model.** The
+  X-learner still beats random targeting on the simultaneous band (1.45, [0.20, 2.70]), but not the
+  Mens e-mail at random: 0.91 [0.01, 1.84] on its own interval, [-0.31, 2.13] on the band.
+* **What to send instead.** The Mens e-mail at random is worth 6.7 incremental conversions per
+  1,000 contacts [4.9, 8.6] at 10%, against 4.9 for random targeting; its paired gain over random
+  targeting is 0.18 [0.08, 0.28], 0.36 [0.17, 0.55] and 0.54 [0.24, 0.86] per 1,000 customers at 10,
+  20 and 30%. Choosing the Mens e-mail was itself done on these data, but between two e-mails whose
+  average effects (from the arm rates above) differ by a factor of about two.
+* **Site visits** ([Appendix D](#appendix-d-all-policies-and-site-visits)): the first rule said
+  target at all three budgets. The revised rule says target at 10% (Euclidean forest, simultaneous
+  band against the Mens e-mail at random [2.93, 9.22]) and at 20% (response model, [0.15, 8.34]),
+  and no model at 30% (R-learner, [-1.17, 7.93]).
 
 What the evidence does not show: that modelling the effect beats modelling the outcome on this
 data. No uplift learner's paired difference against the response model excludes zero, at any
 budget, for conversions or for visits (largest for conversions: X-learner at 30%, 0.52 per 1,000
-customers [-0.23, 1.34]). The winner also changes between budgets, and the 20% interval only just
-clears zero. If the alternative is no targeting, target 20 to 30% of customers, mostly with the
-Mens e-mail. If the alternative is a response model the team already runs, this test cannot tell
-the two apart; the synthetic `sleeping_dogs` scenario below shows the kind of population where the
-difference becomes large.
+customers [-0.23, 1.34]); at 20% the policy that clears both no-model references for visits is the
+response model itself. The synthetic `sleeping_dogs` scenario below shows the kind of population
+where the difference becomes large.
 
 ## Reproduce
 
-Requires [uv](https://docs.astral.sh/uv/) and Python 3.12. No download is needed for the first
-two commands: they run on a synthetic experiment whose true effects are known.
+Requires [uv](https://docs.astral.sh/uv/) and Python 3.12. The first block needs no download: it
+runs on a synthetic experiment whose true effects are known, then fits one learner on it and scores
+the same file.
 
 ```bash
 uv sync
 uv run uplift synth --scenario sleeping_dogs --rows 20000 --out out/synth.parquet
 uv run uplift policy --data out/synth.parquet --budget 0.1 0.2 0.3 --report out/synth-report.html
+uv run uplift fit --data out/synth.parquet --learner dr --out models/synth-dr
+uv run uplift score --model models/synth-dr --input out/synth.parquet --output out/synth-scored.parquet --budget 0.2
 ```
 
 On the Hillstrom data (about 4 MB, verified against the sha256 in `src/causal_uplift/fetch.py`):
@@ -104,13 +146,17 @@ On the Hillstrom data (about 4 MB, verified against the sha256 in `src/causal_up
 uv run uplift fetch hillstrom
 uv run uplift policy --data hillstrom --outcome conversion --budget 0.1 0.2 0.3 --n-jobs 6 \
     --json out/hillstrom-conversion.json --report out/hillstrom-conversion.html
-uv run uplift fit --data hillstrom --outcome conversion --learner dr --out models/dr
-uv run uplift score --model models/dr --input customers.parquet --output scored.parquet --budget 0.2
+uv run uplift fit --data hillstrom --outcome conversion --learner dr --out models/hillstrom-dr
 ```
 
-`score` reads Parquet or CSV with the same feature columns as training and writes one
-`uplift__<arm>` column per e-mail, the best arm, and with `--budget` the assigned arm. Data go to
-`$CAUSAL_UPLIFT_DATA_DIR` (default `~/.cache/causal-uplift-targeting`).
+`score` reads Parquet or CSV with the same feature columns as training (other columns are kept and
+ignored) and writes one `uplift__<arm>` column per e-mail, the best arm, and with `--budget` the
+assigned arm; for new Hillstrom customers that is
+`uv run uplift score --model models/hillstrom-dr --input <your customers file> --output <file>`.
+Data go to `$CAUSAL_UPLIFT_DATA_DIR` (default `~/.cache/causal-uplift-targeting`). Tables written
+by `uplift synth` carry `propensity__<arm>` columns, and any table with such columns is evaluated
+with those assignment probabilities; without them, `--propensity logistic` estimates them instead
+of assuming a randomised test.
 
 With Docker (non-root image running as uid 10001, so mounted directories must be writable by it;
 no compilers in the runtime stage):
@@ -122,12 +168,12 @@ docker run --rm -v "$PWD/data:/data" -v "$PWD/out:/work" causal-uplift-targeting
     policy --data hillstrom --outcome conversion --report /work/report.html
 ```
 
-The full benchmark and the tables in this file (the run above took under seven minutes on the
-machine named in the Measured-on line):
+The benchmark and the tables in this file (the Hillstrom suite takes a few minutes on the machine
+in [Run details](#run-details); wall times are listed there):
 
 ```bash
 uv run uplift fetch hillstrom
-uv run python bench/run.py --profile full   # writes bench/results/*.json
+uv run python bench/run.py --profile full   # writes bench/results/*.json (--suite hillstrom|synthetic for one)
 uv run python bench/tables.py               # prints these tables from those files
 ```
 
@@ -138,10 +184,11 @@ Tests: `uv run pytest` (no network, no downloads; tests on the real file skip if
 
 ## Ranking quality on Hillstrom
 
-Normalised Qini coefficient and AUUC (scikit-uplift's definitions) per e-mail against no e-mail,
-for conversions, on held-out folds with 95% bootstrap intervals, and the median fit time per fold
-on 51,200 training rows. Every learner is fitted once on a small synthetic sample before timing
-starts, so numba compilation and LightGBM thread start-up are not counted.
+Normalised Qini coefficient and AUUC (scikit-uplift's definitions, which need a 0/1 outcome) per
+e-mail against no e-mail, for conversions, on held-out folds with 95% bootstrap intervals, and the
+median fit time per fold on 51,200 training rows (from the first full run; see Run details). Every
+learner is fitted once on a small synthetic
+sample before timing starts, so numba compilation and LightGBM thread start-up are not counted.
 
 | learner | Qini coef., Mens E-Mail [95% CI] | Qini coef., Womens E-Mail [95% CI] | AUUC, Mens E-Mail [95% CI] | AUUC, Womens E-Mail [95% CI] | median fit s / fold |
 |---|---|---|---|---|---|
@@ -208,14 +255,16 @@ What these show:
 * On `sleeping_dogs` the response model ranks backwards: Qini -0.112 and -0.059, while every
   uplift learner scores between 0.096 and 0.103 on arm1 and between 0.051 and 0.058 on arm2. On
   Hillstrom it does not fail like this, which is why it holds up in the policy table.
-* The honest forests have the lowest PEHE on `linear`, `step` and `sleeping_dogs`. Honesty helps
-  most on `sleeping_dogs` (KL 0.0185 against 0.0269 for the same forest grown adaptively) and makes
-  no difference on `linear` (0.0329 and 0.0328).
+* An honest forest has the lowest PEHE on each randomised scenario: the Euclidean one on `linear`
+  (0.0320) and `step` (0.0279), the KL one on `sleeping_dogs` (0.0185). Honesty helps most on
+  `sleeping_dogs` (KL 0.0185 against 0.0269 for the same forest grown adaptively); on `linear` the
+  honest and adaptive KL forests are level (0.0329 and 0.0328).
 * With confounded assignment the S-learner has the lowest PEHE (0.0291). The forests do not use
   propensities and come out at 0.0560 and 0.0558, close to the T-learner's 0.0553.
 * The oracle does not have the highest Qini on `sleeping_dogs` (0.098 against 0.103 for the
   R-learner, DR-learner and Euclidean forest): Qini is computed from realised outcomes on 10,000
-  rows, so it carries noise that ranking by the true effect cannot remove.
+  rows, so it carries noise that ranking by the true effect cannot remove. Averaged over 150
+  samples, no ranking in `tests/test_metrics.py` beats it beyond Monte Carlo error.
 
 ## Limits of this analysis
 
@@ -224,19 +273,28 @@ What these show:
 * Conversions are rare, so differences of a few conversions per 1,000 customers sit inside the
   intervals. 64,000 customers is small for ranking individuals by a causal effect: for conversions,
   every Qini interval for the Mens e-mail includes zero.
+* The decision rule was revised after the first results were seen (ADR 0005). The revision makes
+  the test stricter, not looser, and the verdicts under the first rule are published next to it.
+* The simultaneous band corrects the test of the chosen policy for the choice among nine; it does
+  not correct the estimate, so the value shown for the best learner at each budget is optimistic.
+  The single-e-mail reference is chosen with hindsight on the same customers, which can only
+  flatter it.
 * The bootstrap holds the fitted models fixed: intervals include evaluation noise, not the variance
   of refitting the learners. They are narrower than a repeated-split procedure would give.
-* The recommended policy is the best of several evaluated on the same data, so its estimate is
-  optimistic (winner's curse). Nothing corrects for that.
 * Costs are equal per contact unless `--arm-cost` is given, and the objective counts outcomes, not
-  margin. Spend can be used as the outcome, but only with the Euclidean forest and the meta-learners.
+  margin. Spend can be used as the outcome (`--outcome spend`) but was not benchmarked: the KL forest
+  needs a 0/1 outcome and is left out of the default learners, and the normalised Qini and AUUC are
+  reported as n/a because the "perfect" ranking they divide by is not an upper bound for spend.
+  Policy values and Qini curves are still produced.
 * The uplift forest uses 32 quantile bins per feature and omits the split-normalisation term of the
   original method (ADR 0002). With the default leaf size it cannot split on a few thousand rows.
-* LightGBM defaults were chosen on the synthetic generator (seeds 3 and 4, disjoint from the
-  benchmark seeds), not tuned per learner or per data set.
-* Fit times come from a single run on a desktop session with other processes active. A repeat of
-  the full benchmark reproduced every quality metric exactly but not the timings; the DR-learner's
-  times varied most. Treat the timing columns as orders of magnitude.
+* The shared LightGBM settings (300 trees, 4 leaves, at least 200 rows per leaf) were set by hand
+  when the learners were written and have not changed since. No search behind them was recorded,
+  so this memo cannot show that they were chosen without looking at the Hillstrom data; they were
+  not tuned per learner or per data set.
+* Fit times come from the first full run on a desktop session with other processes active. A
+  repeat of the full benchmark reproduced every quality metric exactly but not the timings; the
+  DR-learner's times varied most. Treat the timing columns as orders of magnitude.
 * The Criteo scale run (`bench/run.py --profile criteo`) is implemented but **not run**; its data
   were not downloaded, so there is no Criteo row in any table.
 * Saved models are pickles: load only model directories you created.
@@ -249,42 +307,48 @@ What these show:
 | Criteo Uplift v2.1 | [huggingface.co/datasets/criteo/criteo-uplift](https://huggingface.co/datasets/criteo/criteo-uplift) (the original go.criteo.net link returned 404 on 2026-10-09); sha256 from the repository's LFS pointer, not verified locally | `CC-BY-NC-SA-4.0`, non-commercial. Not redistributed here. | not run |
 | synthetic experiments | generated by `causal_uplift.synthetic` | MIT, with this code | used |
 
+The Hillstrom checksum was recorded from the first download (trust on first use) over plain HTTP.
 No pretrained models are used; the fitted learners are the only model artifacts. Libraries:
 LightGBM (MIT), scikit-learn (BSD-3-Clause), numba (BSD-2-Clause), numpy (BSD-3-Clause), polars
-(MIT), matplotlib (matplotlib licence, BSD-style); scikit-uplift (MIT) in tests and benchmarks only.
+(MIT), matplotlib (Matplotlib licence, PSF-based); scikit-uplift (MIT) in tests and benchmarks only.
 
 Code: MIT, Copyright (c) 2026 Daniel Lopez.
 
 ## Appendix A: how the numbers are produced
 
+One `uplift policy` run, in the order things happen:
+
 ```mermaid
-flowchart LR
-    subgraph inputs[Inputs]
-        FETCH["uplift fetch<br/>sha256 check"] --> LOAD["loaders<br/>Hillstrom, Criteo, Parquet/CSV"]
-        SYN["synthetic generator<br/>known effects"]
+sequenceDiagram
+    autonumber
+    participant CLI as uplift policy
+    participant Data as loaders and synthetic generator
+    participant Folds as 5 stratified folds
+    participant Learners as S, T, X, R, DR, forests, baselines
+    participant Opt as budget optimiser
+    participant OPE as IPW and AIPW evaluator
+    participant Out as results JSON and HTML report
+    CLI->>Data: Hillstrom (sha256-checked fetch), Parquet or CSV, or synthetic
+    Data->>Folds: X, arm, y and any recorded propensities
+    loop every fold
+        Folds->>Learners: fit on the other four folds
+        Learners-->>Folds: effect per e-mail for the held-out rows
+        Folds->>OPE: per-arm outcome model fitted on the same four folds
     end
-    LOAD --> DATA["UpliftData<br/>X, arm, y"]
-    SYN --> DATA
-    DATA --> FOLDS["5 stratified folds"]
-    FOLDS --> META["S, T, X, R, DR learners<br/>LightGBM or linear base"]
-    FOLDS --> FOREST["uplift forest<br/>KL or Euclidean, honest, numba"]
-    FOLDS --> BASE["baselines<br/>response, random, sklift two-model"]
-    FOLDS --> MU["per-arm outcome model<br/>for AIPW"]
-    META --> CATE["held-out effects<br/>n x arms"]
-    FOREST --> CATE
-    BASE --> CATE
-    CATE --> RANK["Qini, AUUC<br/>bootstrap CIs"]
-    CATE --> ALLOC["budget optimiser<br/>Lagrangian, per fold"]
-    ALLOC --> OPE["IPW and AIPW policy value<br/>paired bootstrap vs random and response"]
-    MU --> OPE
-    RANK --> JSON["results JSON"]
-    OPE --> JSON
-    JSON --> HTML["HTML decision report"]
-    JSON --> TABLES["bench/tables.py<br/>README tables"]
-    META --> MODEL["uplift fit<br/>model directory"]
-    FOREST --> MODEL
-    MODEL --> SCORE["uplift score<br/>Parquet in, Parquet out"]
+    Learners->>Out: Qini and AUUC with bootstrap intervals
+    loop every budget
+        Learners->>Opt: held-out effects
+        Opt->>OPE: one allocation per learner, fold by fold
+        OPE->>OPE: add random targeting and the best single arm at random
+        OPE->>OPE: paired bootstrap, percentile and max-t intervals
+    end
+    OPE->>Out: policy values, gains and the verdict per budget
 ```
+
+`uplift fit` runs the same learners on all rows and saves a model directory; `uplift score` loads
+it, predicts effects for a Parquet or CSV file and, with `--budget`, calls the same optimiser.
+`bench/run.py` drives `evaluate` directly for every learner and writes the JSON that
+`bench/tables.py` turns into this memo.
 
 **Learners** (`learners.py`). Arm 0 is control; every learner returns one effect column per e-mail.
 
@@ -304,22 +368,26 @@ Jaroszewicz (2012) with KL or squared-difference divergence averaged over e-mail
 search in numba, per-tree subsampling and honest leaves (ADR 0002).
 
 **Ranking metrics** (`metrics.py`): Qini and uplift curves with tied scores evaluated together,
-normalised by the perfect ranking, matching scikit-uplift to 1e-9 in the tests. Bootstrap
-replicates reuse one sort and reweight rows.
+normalised by the perfect ranking, matching scikit-uplift to 1e-9 in the tests. The normalised
+scores are only defined for 0/1 outcomes. Bootstrap replicates reuse one sort and reweight rows.
 
 **Policy value** (`ope.py`, `evaluation.py`): a policy is an (n x arms) probability matrix. IPW
 scores are `1{A=a} Y / e_a`; AIPW scores add a cross-fitted outcome model,
-`mu_a + 1{A=a}(Y - mu_a) / e_a`. Propensities are the randomisation shares. Intervals are
-percentile bootstraps over customers, with all policies resampled together, so the differences
-against random targeting and against the response model are paired (ADR 0001).
+`mu_a + 1{A=a}(Y - mu_a) / e_a`. Propensities are the observed arm shares (21,306 / 21,307 /
+21,387 of 64,000 customers, about one third each). Intervals are percentile bootstraps over
+customers, with all policies resampled together, so every gain is a paired difference (ADR 0001).
+The gains of the learner policies against the two no-model policies also get a max-t band: each
+gain is standardised by its bootstrap standard deviation, and the critical value is the 95th
+percentile of the largest standardised deviation across the nine policies in each replicate
+(ADR 0005).
 
 **Budget optimiser** (`policy.py`): Lagrangian relaxation of the multiple-choice knapsack with
 greedy fill and a dual upper bound (ADR 0003).
 
 ## Appendix B: assumptions
 
-* Randomisation: assignment does not depend on unobserved factors, and its probabilities are known
-  (one third per arm in Hillstrom).
+* Randomisation: the arm a customer received did not depend on anything about them. The evaluation
+  therefore uses the observed arm shares as propensities, the same for every customer.
 * No interference: one customer's e-mail does not change another customer's outcome.
 * Overlap: every customer could have received every arm, which randomisation guarantees.
 * Stability: the customers the policy is applied to resemble the 2008 test population.
@@ -332,67 +400,74 @@ greedy fill and a dual upper bound (ADR 0003).
 | `bench/run.py`, `bench/tables.py` | benchmark harness and table printer |
 | `bench/baselines.py` | scikit-uplift two-model wrapper (benchmark and tests only) |
 | `bench/results/` | benchmark JSON with machine, date, git sha and command |
+| `bench/results/2026-10-09/` | the first full Hillstrom run, source of the fit times |
 | `docs/adr/` | design decisions |
-| `tests/` | pytest suite; `tests/golden/` holds the report fixture |
+| `tests/` | pytest suite; `tests/golden/` holds the report fixture and the script that rebuilds it |
 
 ## Appendix D: all policies and site visits
 
 Every evaluated policy for conversions, ordered by AIPW value within each budget
 (`bench/results/hillstrom_conversion.json`):
 
-| budget | policy | share e-mailed (Mens / Womens) | incremental conversions per 1,000 contacts, AIPW [95% CI] | same, IPW | gain vs random targeting per 1,000 customers [95% CI] | gain vs response model per 1,000 customers [95% CI] |
-|---|---|---|---|---|---|---|
-| 10% | response model | 7% / 3% | 9.7 [2.3, 17.9] | 9.4 | 0.48 [-0.25, 1.27] | reference |
-| 10% | T-learner | 7% / 3% | 9.6 [2.4, 16.8] | 9.4 | 0.46 [-0.21, 1.18] | -0.01 [-0.58, 0.56] |
-| 10% | scikit-uplift two-model | 7% / 3% | 9.6 [2.4, 16.8] | 9.4 | 0.46 [-0.21, 1.18] | -0.01 [-0.58, 0.56] |
-| 10% | R-learner | 7% / 3% | 8.1 [0.5, 15.3] | 8.0 | 0.32 [-0.40, 0.99] | -0.16 [-0.83, 0.57] |
-| 10% | DR-learner | 7% / 3% | 7.2 [-0.7, 14.4] | 7.0 | 0.22 [-0.52, 0.91] | -0.26 [-0.93, 0.50] |
-| 10% | X-learner | 7% / 3% | 6.0 [-1.1, 12.8] | 6.1 | 0.11 [-0.57, 0.76] | -0.37 [-1.01, 0.30] |
-| 10% | uplift forest, Euclidean (honest) | 9% / 1% | 5.9 [-0.9, 12.3] | 5.6 | 0.10 [-0.55, 0.71] | -0.38 [-1.19, 0.35] |
-| 10% | random targeting | 5% / 5% | 4.9 [3.6, 6.3] | 5.0 | reference | -0.48 [-1.27, 0.25] |
-| 10% | S-learner | 10% / 0% | 4.3 [-3.1, 11.8] | 4.2 | -0.06 [-0.76, 0.64] | -0.54 [-1.13, 0.03] |
-| 10% | uplift forest, KL (honest) | 9% / 1% | 4.2 [-2.1, 10.6] | 4.2 | -0.07 [-0.68, 0.53] | -0.55 [-1.28, 0.21] |
-| 20% | T-learner | 14% / 6% | 9.3 [4.6, 14.1] | 9.6 | 0.87 [0.06, 1.76] | 0.33 [-0.46, 1.06] |
-| 20% | scikit-uplift two-model | 14% / 6% | 9.3 [4.6, 14.1] | 9.6 | 0.87 [0.06, 1.76] | 0.33 [-0.46, 1.06] |
-| 20% | DR-learner | 15% / 5% | 8.8 [4.1, 13.4] | 9.1 | 0.77 [-0.10, 1.69] | 0.23 [-0.60, 1.09] |
-| 20% | R-learner | 15% / 5% | 8.1 [3.4, 13.0] | 8.2 | 0.64 [-0.22, 1.57] | 0.10 [-0.73, 0.95] |
-| 20% | response model | 15% / 5% | 7.6 [2.6, 12.8] | 7.7 | 0.54 [-0.37, 1.47] | reference |
-| 20% | X-learner | 15% / 5% | 7.6 [3.1, 12.2] | 7.7 | 0.54 [-0.28, 1.37] | -0.00 [-0.84, 0.79] |
-| 20% | S-learner | 19% / 1% | 6.8 [1.5, 12.0] | 7.0 | 0.38 [-0.55, 1.30] | -0.16 [-0.90, 0.56] |
-| 20% | uplift forest, Euclidean (honest) | 19% / 1% | 6.1 [1.4, 10.7] | 6.1 | 0.24 [-0.58, 1.08] | -0.30 [-1.27, 0.65] |
-| 20% | random targeting | 10% / 10% | 4.9 [3.4, 6.3] | 5.0 | reference | -0.54 [-1.47, 0.37] |
-| 20% | uplift forest, KL (honest) | 19% / 1% | 3.9 [-0.7, 8.4] | 3.8 | -0.21 [-1.00, 0.63] | -0.75 [-1.60, 0.22] |
-| 30% | X-learner | 22% / 8% | 9.8 [6.1, 13.5] | 9.8 | 1.45 [0.52, 2.43] | 0.52 [-0.23, 1.34] |
-| 30% | T-learner | 21% / 9% | 8.3 [4.6, 12.3] | 8.6 | 1.02 [0.11, 2.04] | 0.10 [-0.64, 0.81] |
-| 30% | scikit-uplift two-model | 21% / 9% | 8.3 [4.6, 12.3] | 8.6 | 1.02 [0.11, 2.04] | 0.10 [-0.64, 0.81] |
-| 30% | DR-learner | 22% / 8% | 8.2 [4.5, 11.6] | 8.3 | 0.98 [0.06, 1.83] | 0.05 [-0.81, 0.91] |
-| 30% | response model | 22% / 8% | 8.0 [4.1, 11.7] | 8.1 | 0.92 [0.00, 1.84] | reference |
-| 30% | S-learner | 29% / 1% | 7.4 [3.2, 11.4] | 7.7 | 0.75 [-0.33, 1.74] | -0.18 [-0.99, 0.72] |
-| 30% | R-learner | 22% / 8% | 7.4 [3.9, 10.9] | 7.5 | 0.74 [-0.13, 1.65] | -0.18 [-1.00, 0.67] |
-| 30% | uplift forest, Euclidean (honest) | 29% / 1% | 6.7 [2.8, 10.5] | 6.9 | 0.54 [-0.43, 1.53] | -0.38 [-1.29, 0.61] |
-| 30% | uplift forest, KL (honest) | 28% / 2% | 5.0 [1.3, 8.7] | 5.0 | 0.03 [-0.90, 0.92] | -0.90 [-1.80, 0.06] |
-| 30% | random targeting | 15% / 15% | 4.9 [3.4, 6.3] | 5.0 | reference | -0.92 [-1.84, -0.00] |
+| budget | policy | share e-mailed (Mens / Womens) | incremental conversions per 1,000 contacts, AIPW [95% CI] | same, IPW | gain vs random targeting [95% CI] | gain vs best single e-mail at random [95% CI] | gain vs response model [95% CI] |
+|---|---|---|---|---|---|---|---|
+| 10% | response model | 7% / 3% | 9.7 [2.3, 17.9] | 9.4 | 0.48 [-0.25, 1.27] | 0.30 [-0.42, 1.11] | reference |
+| 10% | T-learner | 7% / 3% | 9.6 [2.4, 16.8] | 9.4 | 0.46 [-0.21, 1.18] | 0.28 [-0.39, 1.01] | -0.01 [-0.58, 0.56] |
+| 10% | scikit-uplift two-model | 7% / 3% | 9.6 [2.4, 16.8] | 9.4 | 0.46 [-0.21, 1.18] | 0.28 [-0.39, 1.01] | -0.01 [-0.58, 0.56] |
+| 10% | R-learner | 7% / 3% | 8.1 [0.5, 15.3] | 8.0 | 0.32 [-0.40, 0.99] | 0.14 [-0.54, 0.81] | -0.16 [-0.83, 0.57] |
+| 10% | DR-learner | 7% / 3% | 7.2 [-0.7, 14.4] | 7.0 | 0.22 [-0.52, 0.91] | 0.04 [-0.66, 0.71] | -0.26 [-0.93, 0.50] |
+| 10% | best single e-mail at random (Mens) | 10% / 0% | 6.7 [4.9, 8.6] | 6.8 | 0.18 [0.08, 0.28] | reference | -0.30 [-1.11, 0.42] |
+| 10% | X-learner | 7% / 3% | 6.0 [-1.1, 12.8] | 6.1 | 0.11 [-0.57, 0.76] | -0.07 [-0.74, 0.58] | -0.37 [-1.01, 0.30] |
+| 10% | uplift forest, Euclidean (honest) | 9% / 1% | 5.9 [-0.9, 12.3] | 5.6 | 0.10 [-0.55, 0.71] | -0.08 [-0.73, 0.50] | -0.38 [-1.19, 0.35] |
+| 10% | random targeting | 5% / 5% | 4.9 [3.6, 6.3] | 5.0 | reference | -0.18 [-0.28, -0.08] | -0.48 [-1.27, 0.25] |
+| 10% | S-learner | 10% / 0% | 4.3 [-3.1, 11.8] | 4.2 | -0.06 [-0.76, 0.64] | -0.24 [-0.91, 0.46] | -0.54 [-1.13, 0.03] |
+| 10% | uplift forest, KL (honest) | 9% / 1% | 4.2 [-2.1, 10.6] | 4.2 | -0.07 [-0.68, 0.53] | -0.25 [-0.84, 0.32] | -0.55 [-1.28, 0.21] |
+| 20% | T-learner | 14% / 6% | 9.3 [4.6, 14.1] | 9.6 | 0.87 [0.06, 1.76] | 0.51 [-0.34, 1.42] | 0.33 [-0.46, 1.06] |
+| 20% | scikit-uplift two-model | 14% / 6% | 9.3 [4.6, 14.1] | 9.6 | 0.87 [0.06, 1.76] | 0.51 [-0.34, 1.42] | 0.33 [-0.46, 1.06] |
+| 20% | DR-learner | 15% / 5% | 8.8 [4.1, 13.4] | 9.1 | 0.77 [-0.10, 1.69] | 0.41 [-0.47, 1.30] | 0.23 [-0.60, 1.09] |
+| 20% | R-learner | 15% / 5% | 8.1 [3.4, 13.0] | 8.2 | 0.64 [-0.22, 1.57] | 0.28 [-0.59, 1.21] | 0.10 [-0.73, 0.95] |
+| 20% | response model | 15% / 5% | 7.6 [2.6, 12.8] | 7.7 | 0.54 [-0.37, 1.47] | 0.18 [-0.73, 1.10] | reference |
+| 20% | X-learner | 15% / 5% | 7.6 [3.1, 12.2] | 7.7 | 0.54 [-0.28, 1.37] | 0.18 [-0.66, 0.98] | -0.00 [-0.84, 0.79] |
+| 20% | S-learner | 19% / 1% | 6.8 [1.5, 12.0] | 7.0 | 0.38 [-0.55, 1.30] | 0.02 [-0.93, 0.88] | -0.16 [-0.90, 0.56] |
+| 20% | best single e-mail at random (Mens) | 20% / 0% | 6.7 [4.9, 8.5] | 6.8 | 0.36 [0.17, 0.55] | reference | -0.18 [-1.10, 0.73] |
+| 20% | uplift forest, Euclidean (honest) | 19% / 1% | 6.1 [1.4, 10.7] | 6.1 | 0.24 [-0.58, 1.08] | -0.12 [-0.92, 0.67] | -0.30 [-1.27, 0.65] |
+| 20% | random targeting | 10% / 10% | 4.9 [3.4, 6.3] | 5.0 | reference | -0.36 [-0.55, -0.17] | -0.54 [-1.47, 0.37] |
+| 20% | uplift forest, KL (honest) | 19% / 1% | 3.9 [-0.7, 8.4] | 3.8 | -0.21 [-1.00, 0.63] | -0.57 [-1.32, 0.24] | -0.75 [-1.60, 0.22] |
+| 30% | X-learner | 22% / 8% | 9.8 [6.1, 13.5] | 9.8 | 1.45 [0.52, 2.43] | 0.91 [0.01, 1.84] | 0.52 [-0.23, 1.34] |
+| 30% | T-learner | 21% / 9% | 8.3 [4.6, 12.3] | 8.6 | 1.02 [0.11, 2.04] | 0.48 [-0.41, 1.47] | 0.10 [-0.64, 0.81] |
+| 30% | scikit-uplift two-model | 21% / 9% | 8.3 [4.6, 12.3] | 8.6 | 1.02 [0.11, 2.04] | 0.48 [-0.41, 1.47] | 0.10 [-0.64, 0.81] |
+| 30% | DR-learner | 22% / 8% | 8.2 [4.5, 11.6] | 8.3 | 0.98 [0.06, 1.83] | 0.44 [-0.47, 1.29] | 0.05 [-0.81, 0.91] |
+| 30% | response model | 22% / 8% | 8.0 [4.1, 11.7] | 8.1 | 0.92 [0.00, 1.84] | 0.38 [-0.59, 1.29] | reference |
+| 30% | S-learner | 29% / 1% | 7.4 [3.2, 11.4] | 7.7 | 0.75 [-0.33, 1.74] | 0.21 [-0.79, 1.05] | -0.18 [-0.99, 0.72] |
+| 30% | R-learner | 22% / 8% | 7.4 [3.9, 10.9] | 7.5 | 0.74 [-0.13, 1.65] | 0.21 [-0.70, 1.08] | -0.18 [-1.00, 0.67] |
+| 30% | uplift forest, Euclidean (honest) | 29% / 1% | 6.7 [2.8, 10.5] | 6.9 | 0.54 [-0.43, 1.53] | 0.01 [-0.92, 0.90] | -0.38 [-1.29, 0.61] |
+| 30% | best single e-mail at random (Mens) | 30% / 0% | 6.7 [4.8, 8.6] | 6.8 | 0.54 [0.24, 0.86] | reference | -0.38 [-1.29, 0.59] |
+| 30% | uplift forest, KL (honest) | 28% / 2% | 5.0 [1.3, 8.7] | 5.0 | 0.03 [-0.90, 0.92] | -0.51 [-1.45, 0.32] | -0.90 [-1.80, 0.06] |
+| 30% | random targeting | 15% / 15% | 4.9 [3.4, 6.3] | 5.0 | reference | -0.54 [-0.86, -0.24] | -0.92 [-1.84, -0.00] |
 
 Site visits (`bench/results/hillstrom_visit.json`): visit rates were 10.6% with no e-mail, 18.3%
-with the Mens e-mail and 15.1% with the Womens e-mail. Applying the same rule, every budget clears
-random targeting: the Euclidean forest at 10% (gain 7.61 per 1,000 customers [5.15, 10.22]), the
-response model at 20% (7.33 [4.10, 10.44]) and the R-learner at 30% (8.00 [4.88, 11.51]). Again no
-uplift learner separates from the response model.
+with the Mens e-mail and 15.1% with the Womens e-mail. The same two rules:
 
-| budget | policy | share e-mailed (Mens / Womens) | incremental visits per 1,000 contacts, AIPW [95% CI] | same, IPW | gain vs random targeting per 1,000 customers [95% CI] | gain vs response model per 1,000 customers [95% CI] |
-|---|---|---|---|---|---|---|
-| 10% | best uplift learner: uplift forest, Euclidean (honest) | 10% / 0% | 136.9 [110.6, 164.1] | 139.0 | 7.61 [5.15, 10.22] | 1.61 [-0.08, 3.43] |
-| 10% | response model | 9% / 1% | 120.8 [94.2, 147.5] | 122.9 | 6.00 [3.55, 8.57] | reference |
-| 10% | scikit-uplift two-model | 9% / 1% | 118.3 [92.5, 143.2] | 118.7 | 5.75 [3.49, 8.22] | -0.25 [-2.32, 1.86] |
-| 10% | random targeting | 5% / 5% | 60.7 [55.1, 65.3] | 60.9 | reference | -6.00 [-8.57, -3.55] |
-| 20% | best uplift learner: T-learner | 15% / 5% | 96.9 [80.2, 113.6] | 99.3 | 7.24 [4.28, 10.27] | -0.08 [-3.18, 2.99] |
-| 20% | response model | 17% / 3% | 97.3 [80.0, 114.9] | 102.9 | 7.33 [4.10, 10.44] | reference |
-| 20% | scikit-uplift two-model | 15% / 5% | 96.9 [80.2, 113.6] | 99.3 | 7.24 [4.28, 10.27] | -0.08 [-3.18, 2.99] |
-| 20% | random targeting | 10% / 10% | 60.7 [55.4, 65.9] | 60.9 | reference | -7.33 [-10.44, -4.10] |
-| 30% | best uplift learner: R-learner | 20% / 10% | 87.4 [75.0, 99.8] | 85.1 | 8.00 [4.88, 11.51] | 0.02 [-3.64, 3.56] |
-| 30% | response model | 24% / 6% | 87.3 [73.2, 101.2] | 90.9 | 7.99 [4.50, 11.64] | reference |
-| 30% | scikit-uplift two-model | 21% / 9% | 79.9 [67.8, 92.6] | 80.8 | 5.77 [2.64, 9.14] | -2.22 [-5.68, 1.10] |
-| 30% | random targeting | 15% / 15% | 60.7 [55.9, 66.3] | 60.9 | reference | -7.99 [-11.64, -4.50] |
+| budget | highest AIPW value | gain vs random targeting [95% CI] | same, simultaneous over 9 learners | gain vs best single e-mail at random [95% CI] | same, simultaneous | rule as first written | revised rule |
+|---|---|---|---|---|---|---|---|
+| 10% | uplift forest, Euclidean (honest) | 7.61 [5.15, 10.22] | 7.61 [4.42, 10.80] | 6.07 [3.64, 8.63] | 6.07 [2.93, 9.22] | target | target |
+| 20% | response model | 7.33 [4.10, 10.44] | 7.33 [3.24, 11.41] | 4.24 [0.96, 7.27] | 4.24 [0.15, 8.34] | target | target |
+| 30% | R-learner | 8.00 [4.88, 11.51] | 8.00 [3.51, 12.50] | 3.38 [0.19, 6.77] | 3.38 [-1.17, 7.93] | target | no model |
+
+| budget | policy | share e-mailed (Mens / Womens) | incremental visits per 1,000 contacts, AIPW [95% CI] | same, IPW | gain vs random targeting [95% CI] | gain vs best single e-mail at random [95% CI] | gain vs response model [95% CI] |
+|---|---|---|---|---|---|---|---|
+| 10% | best uplift learner: uplift forest, Euclidean (honest) | 10% / 0% | 136.9 [110.6, 164.1] | 139.0 | 7.61 [5.15, 10.22] | 6.07 [3.64, 8.63] | 1.61 [-0.08, 3.43] |
+| 10% | response model | 9% / 1% | 120.8 [94.2, 147.5] | 122.9 | 6.00 [3.55, 8.57] | 4.46 [2.01, 6.99] | reference |
+| 10% | best single e-mail at random (Mens) | 10% / 0% | 76.1 [69.4, 82.3] | 76.6 | 1.54 [1.19, 1.89] | reference | -4.46 [-6.99, -2.01] |
+| 10% | random targeting | 5% / 5% | 60.7 [55.1, 65.3] | 60.9 | reference | -1.54 [-1.89, -1.19] | -6.00 [-8.57, -3.55] |
+| 20% | best uplift learner: T-learner | 15% / 5% | 96.9 [80.2, 113.6] | 99.3 | 7.24 [4.28, 10.27] | 4.16 [1.13, 7.07] | -0.08 [-3.18, 2.99] |
+| 20% | response model | 17% / 3% | 97.3 [80.0, 114.9] | 102.9 | 7.33 [4.10, 10.44] | 4.24 [0.96, 7.27] | reference |
+| 20% | best single e-mail at random (Mens) | 20% / 0% | 76.1 [69.4, 82.7] | 76.6 | 3.08 [2.45, 3.77] | reference | -4.24 [-7.27, -0.96] |
+| 20% | random targeting | 10% / 10% | 60.7 [55.4, 65.9] | 60.9 | reference | -3.08 [-3.77, -2.45] | -7.33 [-10.44, -4.10] |
+| 30% | best uplift learner: R-learner | 20% / 10% | 87.4 [75.0, 99.8] | 85.1 | 8.00 [4.88, 11.51] | 3.38 [0.19, 6.77] | 0.02 [-3.64, 3.56] |
+| 30% | response model | 24% / 6% | 87.3 [73.2, 101.2] | 90.9 | 7.99 [4.50, 11.64] | 3.36 [-0.00, 6.84] | reference |
+| 30% | best single e-mail at random (Mens) | 30% / 0% | 76.1 [70.1, 83.0] | 76.6 | 4.62 [3.55, 5.69] | reference | -3.36 [-6.84, 0.00] |
+| 30% | random targeting | 15% / 15% | 60.7 [55.9, 66.3] | 60.9 | reference | -4.62 [-5.69, -3.55] | -7.99 [-11.64, -4.50] |
 
 | learner | Qini coef., Mens E-Mail [95% CI] | Qini coef., Womens E-Mail [95% CI] | AUUC, Mens E-Mail [95% CI] | AUUC, Womens E-Mail [95% CI] | median fit s / fold |
 |---|---|---|---|---|---|
