@@ -1,5 +1,7 @@
 # Who should get the e-mail?
 
+[![ci](https://github.com/daniellopez882/causal-uplift-targeting/actions/workflows/ci.yml/badge.svg)](https://github.com/daniellopez882/causal-uplift-targeting/actions/workflows/ci.yml) ![python](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white) ![licence](https://img.shields.io/badge/licence-MIT-green)
+
 **causal-uplift-targeting** estimates which customers buy *because* they were contacted, picks a
 contact policy that fits a budget, and reports what that policy is worth with doubly robust
 confidence intervals. The S-, T-, X-, R- and DR-learners, the KL/Euclidean uplift forest, the Qini
