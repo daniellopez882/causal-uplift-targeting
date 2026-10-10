@@ -106,6 +106,9 @@ class UpliftForest(CateLearner):
             raise ValueError(f"criterion must be one of {tuple(_CRITERIA)}")
         if not 0.0 < subsample <= 1.0 or not 0.0 < max_features <= 1.0:
             raise ValueError("subsample and max_features must be in (0, 1]")
+        # A leaf needs at least one row of every arm, or its divergence and effect are undefined.
+        if n_trees < 1 or min_samples_leaf < 1 or min_estimation_count < 1:
+            raise ValueError("n_trees, min_samples_leaf and min_estimation_count must be at least 1")
         self.criterion = criterion
         self.n_trees = n_trees
         self.max_depth = max_depth

@@ -6,9 +6,13 @@ subject to sum_i cost[a_i] <= budget,  a_i in {no contact, 1..K}
 This is a multiple-choice knapsack. It is solved by Lagrangian relaxation: for a price
 lambda per unit of cost each customer independently takes the arm with the largest
 benefit - lambda * cost (or nothing if that is not positive); lambda is bisected to the
-smallest value whose spend fits the budget, and leftover budget is filled greedily. With
-equal costs this is exactly "top-k by best predicted uplift". The dual function at the
-final lambda is returned as an upper bound on the best achievable predicted benefit.
+smallest value whose spend fits the budget. The budget left over is then filled greedily:
+customers closest to being chosen go first, each taking the arm preferred at lambda if it
+still fits and otherwise the most beneficial arm that does (with unequal costs, a cheaper
+arm can fit where the preferred one does not). The result cannot be extended: no
+uncontacted customer has a positive-benefit arm that fits the remaining budget. With equal
+costs this is exactly "top-k by best predicted uplift". The dual function at the final
+lambda is returned as an upper bound on the best achievable predicted benefit.
 """
 
 from __future__ import annotations
@@ -74,14 +78,15 @@ def allocate(
         best, chosen, spend = spend_at(lam)
 
     assign = np.where(chosen, best + 1, 0)
-    # Greedy fill of the budget left by the discrete jump at lambda, closest-to-chosen first.
-    leftover = np.flatnonzero(~chosen)
+    leftover = np.flatnonzero(~chosen & (benefit > 0).any(axis=1))
     order = leftover[np.argsort(-(benefit - lam * cost)[leftover, best[leftover]], kind="stable")]
     for i in order:
-        if budget - spend < cost.min():
+        remaining = budget - spend + 1e-9
+        if remaining < cost.min():
             break
-        a = best[i]
-        if benefit[i, a] > 0 and spend + cost[a] <= budget + 1e-9:
+        fits = (benefit[i] > 0) & (cost <= remaining)
+        if fits.any():
+            a = int(best[i]) if fits[best[i]] else int(np.argmax(np.where(fits, benefit[i], -np.inf)))
             assign[i] = a + 1
             spend += float(cost[a])
 

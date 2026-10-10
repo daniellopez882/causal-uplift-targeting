@@ -101,6 +101,19 @@ def test_unequal_costs_allocation_is_feasible_and_bounded(problem: tuple[np.ndar
     assert result.spend <= budget + 1e-9
     assert result.benefit <= optimum + 1e-9
     assert optimum <= result.upper_bound + 1e-9
+    # Never more than one customer's benefit short of the optimum ...
+    assert optimum - result.benefit <= max(0.0, float(benefit.max())) + 1e-9
+    # ... and nobody left out could still be added: no positive-benefit arm fits what is left.
+    remaining = budget - result.spend
+    for i in np.flatnonzero(result.assign == 0):
+        assert not ((benefit[i] > 0) & (cost <= remaining + 1e-9)).any()
+
+
+def test_fill_falls_back_to_a_cheaper_arm_that_fits() -> None:
+    # The arm preferred at the shadow price costs 2 and the budget is 1; arm 1 costs 1 and still helps.
+    result = allocate(np.array([[0.5, 2.0]]), 1.0, np.array([1.0, 2.0]))
+    np.testing.assert_array_equal(result.assign, [1])
+    assert result.benefit == pytest.approx(0.5)
 
 
 def test_allocation_skips_negative_benefit_and_respects_caps() -> None:

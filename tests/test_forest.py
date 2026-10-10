@@ -162,3 +162,9 @@ def test_binner_codes_are_monotone_and_handle_constants_and_nan() -> None:
     assert codes[-1, 2] == binner.n_bins_[2] - 1
     with pytest.raises(ValueError, match="max_bins"):
         Binner(max_bins=300)
+
+
+@pytest.mark.parametrize("option", ["n_trees", "min_samples_leaf", "min_estimation_count"])
+def test_forest_rejects_sizes_that_leave_an_arm_empty(option: str) -> None:
+    with pytest.raises(ValueError, match="at least 1"):
+        UpliftForest("ed", **{option: 0})
