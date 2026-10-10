@@ -61,10 +61,23 @@ def test_response_model_fails_by_construction(
     assert qini_coefficient(test.y[rows], uplift[rows, 0], treated) > 0
 
 
-def _continuous_linear(n: int, seed: int) -> tuple[UpliftData, np.ndarray]:
+UNEQUAL_SHARES = np.array([0.7, 0.2, 0.1])
+
+
+def _continuous_linear(n: int, seed: int, assignment: str = "uniform") -> tuple[UpliftData, np.ndarray]:
+    """Linear outcome and effects. ``uniform`` draws arms 1/3 each, ``unequal`` with 70/20/10 odds,
+    ``confounded`` with odds that move with x0, which also drives the outcome."""
     rng = np.random.default_rng(seed)
     X = rng.standard_normal((n, 4))
-    arm = rng.integers(0, 3, n)
+    if assignment == "uniform":
+        arm = rng.integers(0, 3, n)
+    else:
+        if assignment == "unequal":
+            probs = np.broadcast_to(UNEQUAL_SHARES, (n, 3))
+        else:
+            odds = np.exp(np.column_stack([np.zeros(n), X[:, 0], -X[:, 0]]))
+            probs = odds / odds.sum(axis=1, keepdims=True)
+        arm = (rng.random(n)[:, None] > probs.cumsum(axis=1)).sum(axis=1)
     tau = np.column_stack([0.5 + X[:, 1], -0.3 + 0.5 * X[:, 2]])
     effect = np.where(arm == 0, 0.0, tau[np.arange(n), np.maximum(arm - 1, 0)])
     y = 1.0 + X[:, 0] + effect + rng.normal(0, 0.5, n)
@@ -78,6 +91,51 @@ def test_linear_base_is_nearly_exact_when_effects_are_linear(cls: type) -> None:
     test, tau = _continuous_linear(2000, 2)
     estimate = cls(BaseLearner(kind="linear")).fit(train.X, train.arm, train.y).predict(test.X)
     assert _pehe(estimate, tau) < 0.1
+
+
+@pytest.mark.parametrize("cls", [XLearner, RLearner, DRLearner])
+@pytest.mark.parametrize(("assignment", "propensity"), [("unequal", "constant"), ("confounded", "logistic")])
+def test_linear_base_stays_nearly_exact_when_arms_are_unbalanced(cls: type, assignment: str, propensity: str) -> None:
+    train, _ = _continuous_linear(6000, 1, assignment)
+    test, tau = _continuous_linear(2000, 2, assignment)
+    estimate = cls(BaseLearner(kind="linear"), propensity).fit(train.X, train.arm, train.y).predict(test.X)
+    assert _pehe(estimate, tau) < 0.1
+
+
+def test_r_learner_needs_the_propensity_when_assignment_is_confounded() -> None:
+    """With odds that move with x0, residualising on constant arm shares leaves confounding in."""
+    train, _ = _continuous_linear(6000, 1, "confounded")
+    test, tau = _continuous_linear(2000, 2, "confounded")
+    errors = {
+        kind: _pehe(RLearner(BaseLearner(kind="linear"), kind).fit(train.X, train.arm, train.y).predict(test.X), tau)
+        for kind in ("constant", "logistic")
+    }
+    assert errors["logistic"] < 0.8 * errors["constant"]
+
+
+def test_x_learner_weights_the_control_side_model_by_the_propensity() -> None:
+    """g = e_a / (e_a + e_0) multiplies the effect model fitted on control rows (Kuenzel et al. 2019)."""
+    train, _ = _continuous_linear(6000, 1, "unequal")
+    learner = XLearner(BaseLearner(kind="linear")).fit(train.X, train.arm, train.y)
+    X = train.X[:50]
+    shares = np.bincount(train.arm, minlength=3) / train.n
+    expected = []
+    for a, (tau_treated, tau_control) in enumerate(learner.effect_models_, start=1):
+        g = shares[a] / (shares[a] + shares[0])
+        assert abs(g - 0.5) > 0.2  # far from the balanced case, where swapping the two models changes nothing
+        expected.append(g * tau_control.predict(X) + (1.0 - g) * tau_treated.predict(X))
+    np.testing.assert_allclose(learner.predict(X), np.column_stack(expected), rtol=1e-6, atol=1e-9)
+
+
+@pytest.mark.parametrize("name", ["x", "r", "dr"])
+def test_learner_recovers_effects_under_confounded_assignment(name: str, small_base: BaseLearner) -> None:
+    """The PEHE bound with estimated propensities: assignment odds depend on x0, which also moves
+    the outcome, so the naive difference in means (the constant-effect reference) is biased."""
+    train, test = make_synthetic("confounded", 16_000, seed=11), make_synthetic("confounded", 8_000, seed=12)
+    assert test.true_cate is not None
+    learner = make_learner(name, LearnerConfig(base=small_base, propensity="logistic"))
+    estimate = learner.fit(train.X, train.arm, train.y).predict(test.X)
+    assert _pehe(estimate, test.true_cate) < 0.85 * _constant_effect_pehe(train, test)
 
 
 def test_s_learner_with_linear_base_cannot_express_heterogeneity() -> None:
