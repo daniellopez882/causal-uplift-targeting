@@ -19,7 +19,14 @@ from causal_uplift.data import (
     write_table,
 )
 from causal_uplift.fetch import ChecksumError, Source, data_dir, fetch, sha256_of
-from causal_uplift.synthetic import ARM_NAMES, SCENARIOS, assignment_probabilities, make_synthetic, potential_means
+from causal_uplift.synthetic import (
+    ARM_NAMES,
+    SCENARIOS,
+    assignment_probabilities,
+    make_synthetic,
+    potential_means,
+    to_frame,
+)
 
 HILLSTROM_HEADER = "recency,history_segment,history,mens,womens,zip_code,newbie,channel,segment,visit,conversion,spend"
 
@@ -70,7 +77,8 @@ def test_frame_to_data_puts_control_first_and_reads_true_effects() -> None:
     assert spec.names == ("x",)
     assert data.true_cate is not None
     assert data.true_cate.shape == (4, 2)
-    np.testing.assert_allclose(data.design_propensity()[0], [0.5, 0.25, 0.25])
+    np.testing.assert_allclose(data.arm_shares(), [0.5, 0.25, 0.25])
+    assert data.propensity is None  # nothing in the table says how arms were assigned
     with pytest.raises(ValueError, match="control label"):
         frame_to_data(frame, TableSchema(treatment="arm", outcome="y", control="none"))
 
@@ -170,6 +178,23 @@ def test_synthetic_effects_match_potential_outcomes(scenario: str) -> None:
     assert set(np.unique(data.arm)) == {0, 1, 2}
     again = make_synthetic(scenario, 3000, seed=5)
     np.testing.assert_array_equal(data.y, again.y)
+
+
+def test_synthetic_tables_carry_their_assignment_probabilities() -> None:
+    data = make_synthetic("confounded", 500, seed=3)
+    frame = to_frame(data)
+    loaded, spec = frame_to_data(frame, TableSchema(treatment="arm", outcome="purchase", control="control"))
+    assert loaded.propensity is not None
+    assert data.propensity is not None
+    np.testing.assert_allclose(loaded.propensity, data.propensity)
+    assert not any(name.startswith("propensity__") for name in spec.names)  # never used as features
+    broken = frame.with_columns(pl.lit(0.5).alias("propensity__arm1"))
+    with pytest.raises(ValueError, match="sum to 1"):
+        frame_to_data(broken, TableSchema(treatment="arm", outcome="purchase", control="control"))
+    with pytest.raises(ValueError, match="propensity columns must be exactly"):
+        frame_to_data(
+            frame.drop("propensity__arm2"), TableSchema(treatment="arm", outcome="purchase", control="control")
+        )
 
 
 def test_confounded_assignment_depends_on_features() -> None:

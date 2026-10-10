@@ -9,7 +9,7 @@ from __future__ import annotations
 import numpy as np
 import polars as pl
 
-from causal_uplift.data import TRUE_CATE_PREFIX, UpliftData
+from causal_uplift.data import PROPENSITY_PREFIX, TRUE_CATE_PREFIX, UpliftData
 
 SCENARIOS = ("linear", "step", "sleeping_dogs", "confounded")
 ARM_NAMES = ("control", "arm1", "arm2")
@@ -74,11 +74,18 @@ def make_synthetic(scenario: str, n: int, *, n_features: int = 10, seed: int = 0
 
 
 def to_frame(data: UpliftData) -> pl.DataFrame:
-    """Table layout readable by ``frame_to_data`` with treatment ``arm`` and outcome ``purchase``."""
+    """Table layout readable by ``frame_to_data`` with treatment ``arm`` and outcome ``purchase``.
+
+    The assignment probabilities travel with the rows, so a file written here is evaluated with
+    the same propensities as the in-memory experiment (this matters for ``confounded``).
+    """
     columns: dict[str, object] = {name: data.X[:, j] for j, name in enumerate(data.feature_names)}
     columns["arm"] = np.asarray(data.arm_names)[data.arm]
     columns[data.outcome] = data.y
     if data.true_cate is not None:
         for k, name in enumerate(data.arm_names[1:]):
             columns[f"{TRUE_CATE_PREFIX}{name}"] = data.true_cate[:, k]
+    if data.propensity is not None:
+        for a, name in enumerate(data.arm_names):
+            columns[f"{PROPENSITY_PREFIX}{name}"] = data.propensity[:, a]
     return pl.DataFrame(columns)

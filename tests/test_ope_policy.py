@@ -7,7 +7,29 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from causal_uplift.ope import aipw_scores, bootstrap_ratios, ipw_scores, one_hot_policy, policy_value, random_policy
+from causal_uplift.crossfit import experiment_strata, stratified_folds
+from causal_uplift.data import UpliftData
+from causal_uplift.evaluation import (
+    BEST_ARM_POLICY,
+    PROPENSITY_ESTIMATED,
+    PROPENSITY_RECORDED,
+    PROPENSITY_SHARES,
+    RANDOM_POLICY,
+    assignment_propensity,
+    best_single_arm,
+    policy_metrics,
+)
+from causal_uplift.ope import (
+    aipw_scores,
+    bootstrap_ratio_draws,
+    ipw_scores,
+    one_hot_policy,
+    percentile_intervals,
+    policy_value,
+    random_policy,
+    simultaneous_intervals,
+    single_arm_policy,
+)
 from causal_uplift.policy import allocate
 from causal_uplift.synthetic import make_synthetic, potential_means
 
@@ -53,13 +75,96 @@ def test_bootstrap_ratios_are_paired_and_reproducible() -> None:
     values = rng.normal(1.0, 1.0, 2000)
     num = np.column_stack([values, values, 2 * values])
     den = np.column_stack([np.ones(2000), np.ones(2000), np.full(2000, 2.0)])
-    first = bootstrap_ratios(num, den, n_boot=300, seed=4)
+    point, draws = bootstrap_ratio_draws(num, den, n_boot=300, seed=4)
+    first = percentile_intervals(point, draws)
     assert first[0] == first[1] == first[2]  # identical ratios in every replicate
     assert first[0].value == pytest.approx(values.mean())
     assert first[0].lo < values.mean() < first[0].hi
-    assert bootstrap_ratios(num, den, n_boot=300, seed=4) == first
+    again = bootstrap_ratio_draws(num, den, n_boot=300, seed=4)
+    assert percentile_intervals(*again) == first
+    # Identical columns add no multiplicity, so the simultaneous band is a single column's band.
+    joint = simultaneous_intervals(point, draws)
+    assert joint[0] == joint[1] == joint[2]
+    assert joint[0].hi - joint[0].lo == pytest.approx(first[0].hi - first[0].lo, rel=0.1)
     with pytest.raises(ValueError, match="same shape"):
-        bootstrap_ratios(num, den[:, :2], n_boot=10, seed=0)
+        bootstrap_ratio_draws(num, den[:, :2], n_boot=10, seed=0)
+
+
+def test_simultaneous_intervals_cover_every_column_at_once() -> None:
+    """Eight independent means: per-column 95% intervals all cover far less often than 95%
+    of the time, which is the winner's curse a best-of-eight decision runs into."""
+    rng = np.random.default_rng(1)
+    n, m, reps = 400, 8, 150
+    covered = {"percentile": 0, "simultaneous": 0}
+    for rep in range(reps):
+        values = rng.normal(0.0, 1.0, (n, m))
+        point, draws = bootstrap_ratio_draws(values, np.ones((n, m)), n_boot=300, seed=rep)
+        for kind, intervals in (
+            ("percentile", percentile_intervals(point, draws)),
+            ("simultaneous", simultaneous_intervals(point, draws)),
+        ):
+            covered[kind] += all(i.lo <= 0.0 <= i.hi for i in intervals)
+    assert covered["simultaneous"] / reps > 0.88
+    assert covered["percentile"] / reps < 0.8
+
+
+def test_best_single_arm_is_the_arm_worth_most_at_the_budget() -> None:
+    gamma = np.column_stack([np.zeros(4), np.full(4, 0.02), np.full(4, 0.05)])
+    assert best_single_arm(gamma, 0.2, None) == (2, 0.2)
+    # At four times the cost the budget buys a quarter of the contacts, and arm 1 is worth more.
+    assert best_single_arm(gamma, 0.2, np.array([1.0, 4.0])) == (1, 0.2)
+    np.testing.assert_allclose(single_arm_policy(3, 3, 2, 0.2)[0], [0.8, 0.0, 0.2])
+
+
+def test_policy_metrics_score_the_no_model_references() -> None:
+    data = make_synthetic("step", 6000, seed=5)
+    assert data.propensity is not None
+    fold = stratified_folds(experiment_strata(data.arm, data.y), 2, 0)
+    mu = np.zeros((data.n, 3))  # IPW-like AIPW: the estimates are still unbiased with known propensities
+    cates = {"oracle": data.true_cate, "backwards": -data.true_cate}
+    out = policy_metrics(data, cates, mu, data.propensity, fold, budgets=[0.2], costs=None, n_boot=200, seed=0)["0.2"]
+    assert set(out) == {"oracle", "backwards", RANDOM_POLICY, BEST_ARM_POLICY}
+    gamma = aipw_scores(data.arm, data.y, data.propensity, mu)
+    arm, share = best_single_arm(gamma, 0.2, None)
+    reference = out[BEST_ARM_POLICY]
+    assert reference["arm_mix"][data.arm_names[arm]] == pytest.approx(share)
+    expected = 1000 * share * np.mean(gamma[:, arm] - gamma[:, 0])
+    assert reference["aipw_per_1000_customers"]["value"] == pytest.approx(expected)
+    for name in ("oracle", "backwards"):
+        for label in ("random", "best_arm"):
+            joint = out[name][f"aipw_gain_vs_{label}_simultaneous_per_1000_customers"]
+            single = out[name][f"aipw_gain_vs_{label}_per_1000_customers"]
+            assert joint["value"] == single["value"]
+            assert joint["hi"] - joint["lo"] >= 0.95 * (single["hi"] - single["lo"])
+    gains = {name: out[name]["aipw_gain_vs_best_arm_per_1000_customers"]["value"] for name in cates}
+    assert gains["oracle"] > 0 > gains["backwards"]
+    assert "aipw_gain_vs_random_simultaneous_per_1000_customers" not in reference
+
+
+def _confounded_without_records(n: int, seed: int) -> tuple[UpliftData, UpliftData]:
+    data = make_synthetic("confounded", n, seed=seed)
+    stripped = UpliftData(data.X, data.arm, data.y, data.feature_names, data.arm_names, data.outcome)
+    return data, stripped
+
+
+def test_policy_value_uses_recorded_or_estimated_propensities_under_confounding() -> None:
+    """Value of "everyone gets arm1": the arm shares are badly biased when assignment depends on x0."""
+    data, stripped = _confounded_without_records(20_000, seed=4)
+    truth = float(np.mean(potential_means("confounded", data.X)[:, 1] - potential_means("confounded", data.X)[:, 0]))
+    fold = stratified_folds(experiment_strata(data.arm, data.y), 5, 0)
+    estimates = {}
+    for label, source, kind in (
+        (PROPENSITY_RECORDED, data, "constant"),
+        (PROPENSITY_ESTIMATED, stripped, "logistic"),
+        (PROPENSITY_SHARES, stripped, "constant"),
+    ):
+        e, described = assignment_propensity(source, kind, fold)
+        assert described == label
+        gamma = ipw_scores(source.arm, source.y, e)
+        estimates[label] = float(np.mean(gamma[:, 1] - gamma[:, 0]))
+    assert abs(estimates[PROPENSITY_RECORDED] - truth) < 0.02
+    assert abs(estimates[PROPENSITY_ESTIMATED] - truth) < 0.02
+    assert estimates[PROPENSITY_SHARES] - truth > 0.04
 
 
 def _brute_force(benefit: np.ndarray, budget: float, cost: np.ndarray) -> float:

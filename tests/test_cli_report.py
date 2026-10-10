@@ -5,6 +5,7 @@ import json
 import os
 import re
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import polars as pl
@@ -14,7 +15,8 @@ from causal_uplift import fetch as fetch_module
 from causal_uplift.cli import main
 from causal_uplift.fetch import Source
 from causal_uplift.persist import META_FILE, load_model
-from causal_uplift.report import recommend, render_report
+from causal_uplift.report import gain_key, recommend, render_report
+from causal_uplift.synthetic import make_synthetic, to_frame
 
 GOLDEN = Path(__file__).parent / "golden"
 SVG = re.compile(r"<svg.*?</svg>", re.DOTALL)
@@ -35,15 +37,70 @@ def test_report_matches_golden() -> None:
     assert _without_figures(page) == expected_path.read_text(encoding="utf-8")
 
 
-def test_recommendation_flags_budgets_without_evidence() -> None:
+def _golden_with_gains(gains: dict[str, dict[str, float]]) -> dict[str, Any]:
+    """The golden results with every learner's gains at the first budget replaced by ``gains``."""
     results = json.loads((GOLDEN / "results.json").read_text(encoding="utf-8"))
     budget = next(iter(results["policy"]))
     for name, entry in results["policy"][budget].items():
-        if name != "random targeting":
-            entry["aipw_gain_vs_random_per_1000_customers"] = {"value": 1.0, "lo": -2.0, "hi": 4.0}
-    verdicts = {r["budget"]: r["beats_random"] for r in recommend(results)}
-    assert verdicts[budget] is False
-    assert "not distinguishable from zero" in render_report(results)
+        if name not in ("random targeting", "best arm at random"):
+            entry.update({key: dict(interval) for key, interval in gains.items()})
+    return results
+
+
+ABOVE = {"value": 3.0, "lo": 1.0, "hi": 5.0}
+STRADDLING = {"value": 1.0, "lo": -2.0, "hi": 4.0}
+
+
+def test_recommendation_flags_budgets_without_evidence() -> None:
+    results = _golden_with_gains(
+        {
+            gain_key("random"): STRADDLING,
+            gain_key("random", simultaneous=True): STRADDLING,
+            gain_key("best_arm"): STRADDLING,
+            gain_key("best_arm", simultaneous=True): STRADDLING,
+        }
+    )
+    rec = recommend(results)[0]
+    assert (rec["first_rule"], rec["beats_random"], rec["target"]) == (False, False, False)
+    assert "does not separate from random targeting" in render_report(results)
+
+
+def test_recommendation_uses_the_simultaneous_interval_and_the_best_arm() -> None:
+    # The winner's own interval clears zero, but the band over all learners does not: no targeting.
+    results = _golden_with_gains(
+        {
+            gain_key("random"): ABOVE,
+            gain_key("random", simultaneous=True): STRADDLING,
+            gain_key("best_arm"): ABOVE,
+            gain_key("best_arm", simultaneous=True): ABOVE,
+        }
+    )
+    rec = recommend(results)[0]
+    assert (rec["first_rule"], rec["beats_random"], rec["target"]) == (True, False, False)
+    # Beating random targeting is not enough when sending the best arm at random does as well.
+    results = _golden_with_gains(
+        {
+            gain_key("random"): ABOVE,
+            gain_key("random", simultaneous=True): ABOVE,
+            gain_key("best_arm"): STRADDLING,
+            gain_key("best_arm", simultaneous=True): STRADDLING,
+        }
+    )
+    rec = recommend(results)[0]
+    assert (rec["beats_random"], rec["beats_best_arm"], rec["target"]) == (True, False, False)
+    assert "does not separate from the best arm sent at random" in render_report(results)
+    results = _golden_with_gains(
+        {
+            gain_key("random"): ABOVE,
+            gain_key("random", simultaneous=True): ABOVE,
+            gain_key("best_arm"): ABOVE,
+            gain_key("best_arm", simultaneous=True): ABOVE,
+        }
+    )
+    rec = recommend(results)[0]
+    assert rec["target"] is True
+    assert rec["candidates"] == results["settings"]["candidate_policies"] == 3
+    assert "target with" in render_report(results)
 
 
 def test_cli_policy_end_to_end(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -57,7 +114,9 @@ def test_cli_policy_end_to_end(tmp_path: Path, capsys: pytest.CaptureFixture[str
     assert "budget 20%:" in out
     results = json.loads((tmp_path / "p.json").read_text(encoding="utf-8"))
     assert set(results) == {"dataset", "settings", "learners", "policy"}
-    assert set(results["policy"]["0.2"]) == {"t", "forest-ed", "response", "random targeting"}
+    assert set(results["policy"]["0.2"]) == {"t", "forest-ed", "response", "random targeting", "best arm at random"}
+    assert results["settings"]["candidate_policies"] == 3
+    assert results["settings"]["propensity_source"].startswith("recorded")  # the synthetic file carries them
     assert "pehe" in results["learners"]["t"]  # the synthetic file carries the true effects
     assert results["settings"]["ci_level"] == 0.95
     assert sum(results["settings"]["train_rows_per_fold"]) == 2400  # two folds: each row trains once
@@ -71,7 +130,32 @@ def test_cli_policy_end_to_end(tmp_path: Path, capsys: pytest.CaptureFixture[str
         - response["aipw_gain_vs_random_per_1000_customers"]["value"]
     )
     assert policy["aipw_gain_vs_response_per_1000_customers"]["value"] == pytest.approx(via_random, abs=1e-9)
+    # The simultaneous band shares the point estimate and is at least as wide as the percentile interval.
+    joint = policy["aipw_gain_vs_random_simultaneous_per_1000_customers"]
+    single = policy["aipw_gain_vs_random_per_1000_customers"]
+    assert joint["value"] == single["value"]
+    assert joint["hi"] - joint["lo"] >= 0.9 * (single["hi"] - single["lo"])
+    assert "aipw_gain_vs_random_simultaneous_per_1000_customers" not in results["policy"]["0.2"]["random targeting"]
     assert "Recommendation" in (tmp_path / "p.html").read_text(encoding="utf-8")
+
+
+def test_cli_handles_a_continuous_outcome(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    rng = np.random.default_rng(0)
+    frame = to_frame(make_synthetic("step", 1200, seed=1))
+    frame = frame.with_columns(spend=pl.Series(frame["purchase"].to_numpy() * rng.gamma(2.0, 40.0, frame.height)))
+    table = tmp_path / "spend.parquet"
+    frame.drop("purchase").write_parquet(table)
+    args = ["evaluate", "--data", str(table), "--outcome", "spend", "--base", "linear", "--folds", "2"]
+    args += ["--n-boot", "10", "--trees", "5", "--json", str(tmp_path / "e.json")]
+    assert main(args) == 0
+    captured = capsys.readouterr()
+    assert "forest-kl is left out" in captured.err
+    results = json.loads((tmp_path / "e.json").read_text(encoding="utf-8"))
+    assert "forest-kl" not in results["learners"]
+    assert results["learners"]["forest-ed"]["ranking"]["arm1"]["qini"] is None  # not defined for spend
+    assert "n/a" in render_report(results)
+    with pytest.raises(SystemExit, match="needs a 0/1 outcome"):
+        main([*args[:-2], "--learners", "t,forest-kl"])
 
 
 def test_cli_fit_then_score_with_budget(tmp_path: Path) -> None:

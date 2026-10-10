@@ -13,6 +13,7 @@ import polars as pl
 from causal_uplift.fetch import local_path
 
 TRUE_CATE_PREFIX = "true_cate__"
+PROPENSITY_PREFIX = "propensity__"
 
 
 @dataclass(frozen=True)
@@ -20,7 +21,8 @@ class UpliftData:
     """Features, assigned arm and outcome for one experiment.
 
     ``arm`` is 0 for control and 1..K for the K treatments; ``arm_names[0]`` names control.
-    ``true_cate`` (n, K) and ``propensity`` (n, K + 1) are only present when known by design.
+    ``true_cate`` (n, K) and ``propensity`` (n, K + 1) are only present when known by design
+    (generated data, or a table that carries ``true_cate__<arm>`` / ``propensity__<arm>`` columns).
     """
 
     X: np.ndarray
@@ -65,12 +67,9 @@ class UpliftData:
             propensity=None if self.propensity is None else self.propensity[index],
         )
 
-    def design_propensity(self) -> np.ndarray:
-        """Known assignment probabilities, or the empirical arm shares for a randomised test."""
-        if self.propensity is not None:
-            return self.propensity
-        shares = np.bincount(self.arm, minlength=len(self.arm_names)) / self.n
-        return np.broadcast_to(shares, (self.n, len(self.arm_names))).copy()
+    def arm_shares(self) -> np.ndarray:
+        """Observed share of rows in each arm, shape (K + 1,)."""
+        return np.bincount(self.arm, minlength=len(self.arm_names)) / self.n
 
 
 @dataclass(frozen=True)
@@ -135,7 +134,12 @@ class TableSchema:
 def frame_to_data(
     frame: pl.DataFrame, schema: TableSchema, spec: FeatureSpec | None = None
 ) -> tuple[UpliftData, FeatureSpec]:
-    """Turn a table into :class:`UpliftData`; columns named ``true_cate__<arm>`` carry known effects."""
+    """Turn a table into :class:`UpliftData`.
+
+    Columns named ``true_cate__<arm>`` carry known effects (one per treatment) and columns named
+    ``propensity__<arm>`` known assignment probabilities (one per arm, control included). Neither
+    is used as a feature.
+    """
     labels = frame[schema.treatment].cast(pl.String)
     observed = sorted(set(labels.to_list()))
     if schema.control not in observed:
@@ -145,7 +149,8 @@ def frame_to_data(
     arm = np.array([code[v] for v in labels.to_list()], dtype=np.int64)
 
     truth_cols = [c for c in frame.columns if c.startswith(TRUE_CATE_PREFIX)]
-    excluded = {schema.treatment, schema.outcome, *truth_cols}
+    propensity_cols = [c for c in frame.columns if c.startswith(PROPENSITY_PREFIX)]
+    excluded = {schema.treatment, schema.outcome, *truth_cols, *propensity_cols}
     if spec is None:
         columns = schema.features or tuple(c for c in frame.columns if c not in excluded)
         spec = FeatureSpec.infer(frame, columns)
@@ -162,8 +167,21 @@ def frame_to_data(
         arm_names=arm_names,
         outcome=schema.outcome,
         true_cate=true_cate,
+        propensity=_read_propensity(frame, propensity_cols, arm_names),
     )
     return data, spec
+
+
+def _read_propensity(frame: pl.DataFrame, columns: Sequence[str], arm_names: Sequence[str]) -> np.ndarray | None:
+    if not columns:
+        return None
+    expected = [f"{PROPENSITY_PREFIX}{a}" for a in arm_names]
+    if sorted(columns) != sorted(expected):
+        raise ValueError(f"propensity columns must be exactly {expected}, found {sorted(columns)}")
+    probs = frame.select(expected).cast(pl.Float64).to_numpy()
+    if np.isnan(probs).any() or (probs <= 0).any() or not np.allclose(probs.sum(axis=1), 1.0, atol=1e-6):
+        raise ValueError("propensity columns must be positive and sum to 1 in every row")
+    return np.ascontiguousarray(probs)
 
 
 def read_table(path: Path) -> pl.DataFrame:

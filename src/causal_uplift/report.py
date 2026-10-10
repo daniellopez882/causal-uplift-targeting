@@ -12,7 +12,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from causal_uplift.evaluation import RANDOM_POLICY
+from causal_uplift.evaluation import BEST_ARM_POLICY, RANDOM_POLICY, REFERENCE_POLICIES
 
 _STYLE = """
 body{font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;color:#1d2125;background:#fff;
@@ -39,25 +39,49 @@ def _units(results: Mapping[str, Any]) -> str:
     return f"{outcome}s" if dataset.get("binary_outcome") and not outcome.endswith("s") else outcome
 
 
+def gain_key(reference: str, simultaneous: bool = False) -> str:
+    """Result key of the paired AIPW gain against ``reference`` (random, best_arm or response)."""
+    return f"aipw_gain_vs_{reference}{'_simultaneous' if simultaneous else ''}_per_1000_customers"
+
+
 def recommend(results: Mapping[str, Any]) -> list[dict[str, Any]]:
-    """Per budget: the policy with the highest AIPW value, and whether it beats random targeting."""
+    """Per budget: the learner policy with the highest AIPW value, and the tests it has to pass.
+
+    The rule as first written compared that policy with random targeting on its own 95%
+    percentile interval (``first_rule``). Because the winner is picked by looking at the
+    estimates, the rule now uses the simultaneous interval over all learner policies, and it
+    also asks the winner to beat the best single arm sent to random customers, the strongest
+    rule that needs no model. ``target`` is true only when both simultaneous lower bounds are
+    above zero.
+    """
     out: list[dict[str, Any]] = []
     for budget, policies in results.get("policy", {}).items():
-        candidates = {k: v for k, v in policies.items() if k != RANDOM_POLICY}
+        candidates = {k: v for k, v in policies.items() if k not in REFERENCE_POLICIES}
         if not candidates:
             continue
         best = max(candidates, key=lambda k: candidates[k]["aipw_per_1000_customers"]["value"])
-        gain = candidates[best]["aipw_gain_vs_random_per_1000_customers"]
-        out.append(
-            {
-                "budget": budget,
-                "policy": best,
-                "beats_random": gain["lo"] > 0,
-                "per_1000_contacts": candidates[best]["aipw_per_1000_contacts"],
-                "gain_vs_random": gain,
-                "arm_mix": candidates[best]["arm_mix"],
-            }
-        )
+        entry = candidates[best]
+        rec: dict[str, Any] = {
+            "budget": budget,
+            "policy": best,
+            "candidates": len(candidates),
+            "per_1000_contacts": entry["aipw_per_1000_contacts"],
+            "arm_mix": entry["arm_mix"],
+            "gain_vs_random": entry[gain_key("random")],
+            "gain_vs_random_simultaneous": entry[gain_key("random", simultaneous=True)],
+        }
+        rec["first_rule"] = rec["gain_vs_random"]["lo"] > 0
+        rec["beats_random"] = rec["gain_vs_random_simultaneous"]["lo"] > 0
+        rec["target"] = rec["beats_random"]
+        reference = policies.get(BEST_ARM_POLICY)
+        if reference is not None:
+            arm, share = max(list(reference["arm_mix"].items())[1:], key=lambda kv: kv[1])
+            rec["best_arm"] = {"arm": arm, "share": share, "gain_vs_random": reference[gain_key("random")]}
+            rec["gain_vs_best_arm"] = entry[gain_key("best_arm")]
+            rec["gain_vs_best_arm_simultaneous"] = entry[gain_key("best_arm", simultaneous=True)]
+            rec["beats_best_arm"] = rec["gain_vs_best_arm_simultaneous"]["lo"] > 0
+            rec["target"] = rec["beats_random"] and rec["beats_best_arm"]
+        out.append(rec)
     return out
 
 
@@ -88,22 +112,46 @@ def qini_figure(results: Mapping[str, Any]) -> str:
     return _svg(fig)
 
 
+_REFERENCE_NAMES = {"random": RANDOM_POLICY, "best_arm": BEST_ARM_POLICY}
+
+
+def _gain_cell(p: Mapping[str, Any], name: str, reference: str, *, simultaneous: bool = False) -> str:
+    if name == _REFERENCE_NAMES[reference]:
+        return "reference"
+    interval = p.get(gain_key(reference, simultaneous))
+    return "n/a" if interval is None else _fmt(interval, 2)
+
+
 def _policy_table(budget: str, policies: Mapping[str, Any], units: str, arms: list[str]) -> str:
     rows = sorted(policies.items(), key=lambda kv: -kv[1]["aipw_per_1000_customers"]["value"])
+    n_candidates = sum(1 for name in policies if name not in REFERENCE_POLICIES)
+    references = [r for r, name in _REFERENCE_NAMES.items() if name in policies]
     head = (
         "<tr><th>policy</th><th>contacted</th><th>arm mix (" + " / ".join(html.escape(a) for a in arms[1:]) + ")</th>"
-        f"<th>incremental {units} per 1,000 contacts (AIPW)</th><th>same, IPW</th>"
-        f"<th>per 1,000 customers (AIPW)</th><th>gain vs random per 1,000 customers</th></tr>"
+        f"<th>incremental {units} per 1,000 contacts (AIPW)</th><th>same, IPW</th><th>per 1,000 customers (AIPW)</th>"
+        + "".join(
+            f"<th>gain vs {_REFERENCE_NAMES[r]} per 1,000 customers</th>"
+            f"<th>same, simultaneous over {n_candidates} learners</th>"
+            for r in references
+        )
+        + "</tr>"
     )
     body = []
     for name, p in rows:
         mix = " / ".join(f"{p['arm_mix'][a]:.0%}" for a in arms[1:])
+        gains = "".join(
+            f"<td>{_gain_cell(p, name, r)}</td><td>{_gain_cell(p, name, r, simultaneous=True)}</td>" for r in references
+        )
         body.append(
             f"<tr><td>{html.escape(name)}</td><td>{p['contact_rate']:.1%}</td><td>{mix}</td>"
             f"<td>{_fmt(p['aipw_per_1000_contacts'])}</td><td>{p['ipw_per_1000_contacts']['value']:.1f}</td>"
-            f"<td>{_fmt(p['aipw_per_1000_customers'])}</td><td>{_fmt(p['aipw_gain_vs_random_per_1000_customers'])}</td></tr>"
+            f"<td>{_fmt(p['aipw_per_1000_customers'])}</td>{gains}</tr>"
         )
     return f"<h3>Budget: {float(budget):.0%} of customers</h3><table>{head}{''.join(body)}</table>"
+
+
+def _score_cell(interval: Mapping[str, float] | None) -> str:
+    return "n/a" if interval is None else _fmt(interval, 3)
 
 
 def _ranking_table(results: Mapping[str, Any]) -> str:
@@ -115,7 +163,7 @@ def _ranking_table(results: Mapping[str, Any]) -> str:
     body = []
     for name, entry in results["learners"].items():
         cells = "".join(
-            f"<td>{_fmt(entry['ranking'][a]['qini'], 3)}</td><td>{_fmt(entry['ranking'][a]['auuc'], 3)}</td>"
+            f"<td>{_score_cell(entry['ranking'][a]['qini'])}</td><td>{_score_cell(entry['ranking'][a]['auuc'])}</td>"
             for a in arms
         )
         body.append(f"<tr><td>{html.escape(name)}</td>{cells}<td>{entry['fit_seconds_mean']:.2f}</td></tr>")
@@ -137,50 +185,86 @@ def _pehe_table(results: Mapping[str, Any]) -> str:
     )
 
 
+def _gains_text(rec: Mapping[str, Any]) -> str:
+    gain, joint = rec["gain_vs_random"], rec["gain_vs_random_simultaneous"]
+    tests = [
+        f"against random targeting {gain['value']:.2f} per 1,000 customers (95% CI {gain['lo']:.2f} to "
+        f"{gain['hi']:.2f}; simultaneous over the {rec['candidates']} learners {joint['lo']:.2f} to {joint['hi']:.2f})"
+    ]
+    best_arm = rec.get("best_arm")
+    if best_arm is not None:
+        g, j = rec["gain_vs_best_arm"], rec["gain_vs_best_arm_simultaneous"]
+        tests.append(
+            f"against sending {html.escape(best_arm['arm'])} to a random {best_arm['share']:.0%} {g['value']:.2f} "
+            f"(95% CI {g['lo']:.2f} to {g['hi']:.2f}; simultaneous {j['lo']:.2f} to {j['hi']:.2f})"
+        )
+    return "Gain " + "; ".join(tests) + "."
+
+
 def _decision_block(results: Mapping[str, Any], units: str) -> str:
     items = []
     for rec in recommend(results):
-        budget = float(rec["budget"])
-        per = rec["per_1000_contacts"]
-        gain = rec["gain_vs_random"]
-        treatments = list(rec["arm_mix"].items())[1:]
-        mix = ", ".join(f"{a} to {share:.0%}" for a, share in treatments if share > 0) + " of customers"
-        if rec["beats_random"]:
+        head = f"<b>Budget {float(rec['budget']):.0%}:</b> "
+        policy = html.escape(rec["policy"])
+        if rec["target"]:
+            per = rec["per_1000_contacts"]
+            treatments = list(rec["arm_mix"].items())[1:]
+            mix = ", ".join(f"{a} to {share:.0%}" for a, share in treatments if share > 0) + " of customers"
             items.append(
-                f"<div class=decision><b>Budget {budget:.0%}:</b> target with <b>{html.escape(rec['policy'])}</b> "
-                f"(sending {html.escape(mix)}). Estimated {per['value']:.1f} incremental {units} per 1,000 contacts "
-                f"(95% CI {per['lo']:.1f} to {per['hi']:.1f}); {gain['value']:.1f} more per 1,000 customers than "
-                f"random targeting (95% CI {gain['lo']:.1f} to {gain['hi']:.1f}).</div>"
+                f"<div class=decision>{head}target with <b>{policy}</b> (sending {html.escape(mix)}). Estimated "
+                f"{per['value']:.1f} incremental {units} per 1,000 contacts (95% CI {per['lo']:.1f} to "
+                f"{per['hi']:.1f}). {_gains_text(rec)}</div>"
             )
-        else:
-            items.append(
-                f"<div class='decision none'><b>Budget {budget:.0%}:</b> the best point estimate is "
-                f"<b>{html.escape(rec['policy'])}</b>, but its gain over random targeting "
-                f"({gain['value']:.1f} per 1,000 customers, 95% CI {gain['lo']:.1f} to {gain['hi']:.1f}) "
-                "is not distinguishable from zero. Model-based targeting is not justified at this budget "
-                "on this evidence.</div>"
+            continue
+        rival = "the best arm sent at random" if rec["beats_random"] else "random targeting"
+        text = (
+            f"{head}the best point estimate is <b>{policy}</b>, but it does not separate from {rival} once the "
+            f"choice among the {rec['candidates']} learners is allowed for, so model-based targeting is not "
+            f"justified at this budget on this evidence. {_gains_text(rec)}"
+        )
+        best_arm = rec.get("best_arm")
+        if best_arm is not None and best_arm["gain_vs_random"]["lo"] > 0:
+            g = best_arm["gain_vs_random"]
+            text += (
+                f" Without a model, sending {html.escape(best_arm['arm'])} to a random {best_arm['share']:.0%} is "
+                f"worth {g['value']:.2f} more per 1,000 customers than a random arm (95% CI {g['lo']:.2f} to "
+                f"{g['hi']:.2f})."
             )
+        items.append(f"<div class='decision none'>{text}</div>")
     return "".join(items)
 
 
-_APPENDIX = """
-<h2>Appendix: how these numbers were produced</h2>
-<ul>
-<li>Rows were split into {folds} folds stratified by arm and outcome. Every learner was fitted on
-{folds_minus} folds and scored the remaining one, so each customer's score comes from a model that never saw them.</li>
-<li>Budgets are applied inside each held-out fold: the top share of that fold by best predicted uplift is contacted,
-each with the arm of highest predicted uplift, skipping customers whose best predicted uplift is not positive.</li>
-<li>Policy value uses inverse propensity weighting (IPW) and augmented IPW (AIPW). Propensities are known by
-design (the arm shares of a randomised test); the AIPW outcome model is a cross-fitted per-arm {base} model.
-Random targeting is scored in expectation over its randomisation.</li>
-<li>Intervals are 95% percentile bootstraps over customers ({n_boot} replicates). Policy comparisons resample
-all policies jointly, so the gain against random targeting is a paired estimate. Fitted models are held fixed
-across replicates, so the intervals do not include refitting variance.</li>
-<li>Assumptions: the arm was randomised (or its propensities are known), one customer's e-mail does not change
-another's outcome, and the future population resembles this one. The recommended policy is the best of several
-on the same data, so its estimate is slightly optimistic.</li>
-</ul>
-"""
+def _appendix(settings: Mapping[str, Any], has_policy: bool) -> str:
+    folds = settings["folds"]
+    items = [
+        f"Rows were split into {folds} folds stratified by arm and outcome. Every learner was fitted on {folds - 1} "
+        "folds and scored the remaining one, so each customer's score comes from a model that never saw them.",
+        f"Intervals are 95% percentile bootstraps over customers ({settings['n_boot']} replicates). Fitted models are "
+        "held fixed across replicates, so the intervals do not include refitting variance.",
+    ]
+    if has_policy:
+        n = settings["candidate_policies"]
+        items += [
+            "Budgets are applied inside each held-out fold: the top share of that fold by best predicted uplift is "
+            "contacted, each with the arm of highest predicted uplift, skipping customers whose best predicted uplift "
+            "is not positive. With unequal arm costs the budget optimiser makes that choice.",
+            "Policy value uses inverse propensity weighting (IPW) and augmented IPW (AIPW). Assignment probabilities: "
+            f"{html.escape(settings['propensity_source'])}. The AIPW outcome model is a cross-fitted per-arm "
+            f"{html.escape(str(settings['base']['kind']))} model. Random targeting is scored in expectation over its "
+            "randomisation. Policy comparisons resample all policies jointly, so the gains are paired estimates.",
+            "Two policies use no model: random targeting (random customers, random arm) and, with more than one "
+            "treatment, the best arm at random (random customers, all sent the arm with the highest average effect "
+            "on these rows; choosing it with hindsight favours this reference).",
+            f"The recommendation at each budget is the best of {n} learner policies on the same customers, so its "
+            f"gains over both no-model policies are judged on simultaneous 95% intervals (max-t bootstrap) that "
+            f"cover the gains of all {n} at once. Targeting is recommended only when both lower bounds are above "
+            "zero. The point estimate of the chosen policy is still optimistic.",
+            "Assumptions: given the features, the arm received does not depend on anything that also drives the "
+            "outcome (true by design in a randomised test), every customer could have received every arm, one "
+            "customer's e-mail does not change another's outcome, and the future population resembles this one.",
+        ]
+    body = "".join(f"<li>{item}</li>" for item in items)
+    return f"<h2>Appendix: how these numbers were produced</h2><ul>{body}</ul>"
 
 
 def render_report(results: Mapping[str, Any], title: str = "Uplift decision report") -> str:
@@ -207,18 +291,11 @@ def render_report(results: Mapping[str, Any], title: str = "Uplift decision repo
         parts.extend(_policy_table(b, p, units, arms) for b, p in results["policy"].items())
     parts.append(
         "<h2>Ranking quality</h2><p>Normalised Qini coefficient and AUUC per treatment arm, "
-        "with 95% bootstrap intervals.</p>"
+        "with 95% bootstrap intervals; both are defined for 0/1 outcomes only (n/a otherwise).</p>"
     )
     parts.append(_ranking_table(results))
     parts.append(f"<figure>{qini_figure(results)}<figcaption class=muted>Held-out Qini curves.</figcaption></figure>")
     parts.append(_pehe_table(results))
-    parts.append(
-        _APPENDIX.format(
-            folds=settings["folds"],
-            folds_minus=settings["folds"] - 1,
-            n_boot=settings["n_boot"],
-            base=html.escape(str(settings["base"]["kind"])),
-        )
-    )
+    parts.append(_appendix(settings, "policy" in results))
     parts.append("</body></html>\n")
     return "\n".join(p for p in parts if p)

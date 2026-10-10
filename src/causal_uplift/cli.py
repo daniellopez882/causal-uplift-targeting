@@ -123,6 +123,7 @@ def _run_evaluation(args: argparse.Namespace, budgets: Sequence[float] | None) -
         seed=args.seed,
         budgets=budgets,
         costs=costs,
+        propensity=args.propensity,
         progress=_log,
     )
     results["settings"]["learner_config"] = _config(args, args.seed).to_dict()
@@ -183,14 +184,26 @@ def cmd_policy(args: argparse.Namespace) -> int:
     _write_outputs(results, args, "Uplift decision report")
     _print_ranking(results)
     for rec in recommend(results):
-        g = rec["gain_vs_random"]
-        verdict = "beats random" if rec["beats_random"] else "not distinguishable from random"
-        print(
-            f"budget {float(rec['budget']):.0%}: {rec['policy']} "
-            f"{rec['per_1000_contacts']['value']:.1f} per 1,000 contacts; "
-            f"gain vs random {g['value']:.1f} [{g['lo']:.1f}, {g['hi']:.1f}] per 1,000 customers ({verdict})"
-        )
+        print(_verdict_line(rec))
     return 0
+
+
+def _verdict_line(rec: dict[str, Any]) -> str:
+    def ci(key: str) -> str:
+        g, j = rec[key], rec[f"{key}_simultaneous"]
+        return f"{g['value']:.2f} [{g['lo']:.2f}, {g['hi']:.2f}], simultaneous [{j['lo']:.2f}, {j['hi']:.2f}]"
+
+    tests = [f"gain vs random targeting {ci('gain_vs_random')}"]
+    if "best_arm" in rec:
+        tests.append(f"vs {rec['best_arm']['arm']} to a random {rec['best_arm']['share']:.0%} {ci('gain_vs_best_arm')}")
+    rival = "the best arm at random" if rec["beats_random"] else "random targeting"
+    verdict = "target" if rec["target"] else f"no model: does not separate from {rival}"
+    value = rec["per_1000_contacts"]["value"]
+    return (
+        f"budget {float(rec['budget']):.0%}: {rec['policy']} {value:.1f} per 1,000 contacts; "
+        + "; ".join(tests)
+        + f" per 1,000 customers, {rec['candidates']} learners ({verdict})"
+    )
 
 
 def cmd_score(args: argparse.Namespace) -> int:
@@ -223,13 +236,22 @@ def _add_data_args(p: argparse.ArgumentParser) -> None:
 
 def _add_learner_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--base", choices=BASE_KINDS, default="lightgbm")
-    p.add_argument("--propensity", choices=PROPENSITY_KINDS, default="constant")
+    p.add_argument(
+        "--propensity",
+        choices=PROPENSITY_KINDS,
+        default="constant",
+        help="for X/R/DR and, when the data carry no propensity__<arm> columns, for IPW/AIPW policy value: "
+        "constant = observed arm shares (randomised test), logistic = cross-fitted logistic regression",
+    )
     p.add_argument("--trees", type=int, help="trees per uplift forest")
     p.add_argument("--n-jobs", type=int, default=1)
 
 
 def _add_eval_args(p: argparse.ArgumentParser) -> None:
-    p.add_argument("--learners", default=DEFAULT_LEARNERS)
+    p.add_argument(
+        "--learners",
+        help=f"comma-separated (default {DEFAULT_LEARNERS}; {BINARY_ONLY} is skipped for non-0/1 outcomes)",
+    )
     p.add_argument("--folds", type=int, default=5)
     p.add_argument("--n-boot", type=int, default=1000)
     p.add_argument("--json", help="write results JSON here")
