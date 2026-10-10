@@ -33,6 +33,8 @@ from causal_uplift.report import recommend, render_report
 from causal_uplift.synthetic import SCENARIOS, make_synthetic, to_frame
 
 DEFAULT_LEARNERS = "s,t,x,r,dr,forest-kl,forest-ed,response,random"
+BINARY_ONLY = "forest-kl"
+NAMED_EXPERIMENTS = ("hillstrom", "criteo")
 
 
 def _log(message: str) -> None:
@@ -63,11 +65,17 @@ def _config(args: argparse.Namespace, seed: int) -> LearnerConfig:
     )
 
 
-def _learner_names(raw: str) -> list[str]:
-    names = [n.strip() for n in raw.split(",") if n.strip()]
+def _learner_names(raw: str | None, data: UpliftData) -> list[str]:
+    """Parse ``--learners``; the KL forest is dropped from the default set when the outcome is not 0/1."""
+    names = [n.strip() for n in (raw or DEFAULT_LEARNERS).split(",") if n.strip()]
     unknown = sorted(set(names) - set(LEARNER_NAMES))
     if unknown:
         raise SystemExit(f"unknown learners {unknown}; choose from {', '.join(LEARNER_NAMES)}")
+    if BINARY_ONLY in names and not data.binary_outcome:
+        if raw is not None:
+            raise SystemExit(f"{BINARY_ONLY} needs a 0/1 outcome and {data.outcome!r} is not; use forest-ed instead")
+        _log(f"outcome {data.outcome!r} is not 0/1, so {BINARY_ONLY} is left out of the default learners")
+        names.remove(BINARY_ONLY)
     return names
 
 
@@ -82,17 +90,27 @@ def _write_outputs(results: dict[str, Any], args: argparse.Namespace, title: str
         _log(f"wrote {args.report}")
 
 
+def _qini_text(interval: dict[str, float] | None) -> str:
+    return "    n/a" if interval is None else f"{interval['value']:+.4f}"
+
+
 def _print_ranking(results: dict[str, Any]) -> None:
     arms = results["dataset"]["arms"][1:]
     print("learner      " + "  ".join(f"qini[{a}]" for a in arms) + "  fit_s")
     for name, entry in results["learners"].items():
-        cells = "  ".join(f"{entry['ranking'][a]['qini']['value']:+.4f}" for a in arms)
+        cells = "  ".join(_qini_text(entry["ranking"][a]["qini"]) for a in arms)
         print(f"{name:12s} {cells}  {entry['fit_seconds_mean']:.2f}")
 
 
 def _run_evaluation(args: argparse.Namespace, budgets: Sequence[float] | None) -> dict[str, Any]:
     data, _ = load_dataset(args)
-    names = _learner_names(args.learners)
+    names = _learner_names(args.learners, data)
+    from_file = args.data not in NAMED_EXPERIMENTS and not args.data.startswith("synthetic:")
+    if budgets and from_file and data.propensity is None and args.propensity == "constant":
+        _log(
+            f"note: {args.data} has no propensity__<arm> columns, so policy values assume a randomised test "
+            "with the observed arm shares; if assignment depended on the features, pass --propensity logistic"
+        )
     base = BaseLearner(kind=args.base, n_jobs=args.n_jobs)
     factories = {name: (lambda k, name=name: make_learner(name, _config(args, args.seed + k))) for name in names}
     costs = np.asarray(args.arm_cost, dtype=np.float64) if getattr(args, "arm_cost", None) else None
@@ -135,7 +153,8 @@ def cmd_synth(args: argparse.Namespace) -> int:
 
 def cmd_fit(args: argparse.Namespace) -> int:
     data, spec = load_dataset(args)
-    learner = make_learner(args.learner, _config(args, args.seed))
+    (name,) = _learner_names(args.learner, data)
+    learner = make_learner(name, _config(args, args.seed))
     _log(f"fitting {args.learner} on {data.n} rows")
     learner.fit(data.X, data.arm, data.y, len(data.arm_names))
     meta = {

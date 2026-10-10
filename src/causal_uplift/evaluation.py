@@ -69,18 +69,23 @@ def pehe(true_cate: np.ndarray, cate: np.ndarray, treatment_names: Sequence[str]
 def ranking_metrics(
     data: UpliftData, cate: np.ndarray, *, n_boot: int, seed: int, level: float = CI_LEVEL, curve_points: int = 51
 ) -> dict[str, Any]:
-    """Per treatment arm: Qini coefficient and AUUC with bootstrap intervals, plus a Qini curve."""
+    """Per treatment arm: Qini coefficient and AUUC with bootstrap intervals, plus a Qini curve.
+
+    The normalised scores are only defined for a 0/1 outcome; for any other outcome they are
+    ``None`` and the Qini curve is the ranking summary.
+    """
     out: dict[str, Any] = {}
     for k, arm_name in enumerate(data.arm_names[1:], start=1):
         rows = np.flatnonzero((data.arm == 0) | (data.arm == k))
         y = data.y[rows]
         treated = (data.arm[rows] == k).astype(np.float64)
         score = cate[rows, k - 1]
-        intervals = RankingBootstrap(y, score, treated).run(n_boot, seed + k, level)
         curve = qini_curve(y, score, treated).resample(curve_points)
-        out[arm_name] = {
-            "qini": intervals["qini"].to_dict(),
-            "auuc": intervals["auuc"].to_dict(),
+        entry: dict[str, Any] = {"qini": None, "auuc": None}
+        if data.binary_outcome:
+            intervals = RankingBootstrap(y, score, treated).run(n_boot, seed + k, level)
+            entry = {"qini": intervals["qini"].to_dict(), "auuc": intervals["auuc"].to_dict()}
+        out[arm_name] = entry | {
             "curve": {
                 "fraction": (curve.n_targeted / rows.size).round(4).tolist(),
                 "incremental_per_customer": (curve.value / rows.size).round(6).tolist(),

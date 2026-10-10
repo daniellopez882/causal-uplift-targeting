@@ -3,8 +3,10 @@
 Conventions follow scikit-uplift so results are comparable: rows are ranked by descending
 score, tied scores are evaluated together at the end of their group, both curves start at
 (0, 0), and the normalised scores divide the area above the random line by that of the
-perfect ranking. Row weights make bootstrap replicates cheap: a replicate is the same sorted
-data with multinomial counts as weights.
+perfect ranking. The perfect rankings are defined for 0/1 outcomes only, so the normalised
+scores reject anything else; the curves themselves accept any outcome. Row weights make
+bootstrap replicates cheap: a replicate is the same sorted data with multinomial counts as
+weights.
 """
 
 from __future__ import annotations
@@ -94,6 +96,13 @@ def _prepare(
     return y, t, w
 
 
+def _require_binary(y: np.ndarray) -> None:
+    # With a continuous outcome the "perfect" orderings below are not upper bounds, and the
+    # normalised score can exceed 1 (scikit-uplift refuses such outcomes for the same reason).
+    if not np.isin(y, (0.0, 1.0)).all():
+        raise ValueError("normalised Qini and AUUC need a 0/1 outcome; use qini_curve for other outcomes")
+
+
 def _perfect_qini_score(y: np.ndarray, t: np.ndarray) -> np.ndarray:
     # Treated responders first, control responders last (negative effects allowed).
     return y * t - y * (1.0 - t)
@@ -120,11 +129,13 @@ def uplift_curve(y: np.ndarray, score: np.ndarray, treated: np.ndarray, weight: 
 
 def perfect_qini_curve(y: np.ndarray, treated: np.ndarray, weight: np.ndarray | None = None) -> Curve:
     y, t, w = _prepare(y, treated, weight)
+    _require_binary(y)
     return _qini(_Ranked.from_score(_perfect_qini_score(y, t)), y, t, w)
 
 
 def perfect_uplift_curve(y: np.ndarray, treated: np.ndarray, weight: np.ndarray | None = None) -> Curve:
     y, t, w = _prepare(y, treated, weight)
+    _require_binary(y)
     return _uplift(_Ranked.from_score(_perfect_uplift_score(y, t, w)), y, t, w)
 
 
@@ -158,6 +169,7 @@ class RankingBootstrap:
 
     def __init__(self, y: np.ndarray, score: np.ndarray, treated: np.ndarray) -> None:
         self.y, self.t, _ = _prepare(y, treated, None)
+        _require_binary(self.y)
         self.model = _Ranked.from_score(np.asarray(score, dtype=np.float64))
         self.perfect_qini = _Ranked.from_score(_perfect_qini_score(self.y, self.t))
         self.perfect_uplift_y = _Ranked.from_score(2.0 * (self.y == self.t) + self.y)
