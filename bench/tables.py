@@ -1,26 +1,33 @@
 """Print the README tables from the benchmark JSON files.
 
-    uv run python bench/tables.py [--results-dir bench/results] [--prefix smoke-]
+    uv run python bench/tables.py [--results-dir bench/results] [--prefix smoke-] [--timings-dir DIR]
 
-Only numbers present in the result files are printed; nothing is typed by hand. The
-recommendation lines apply the same rule as the HTML report (``causal_uplift.report.recommend``).
+Only numbers present in the result files are printed; nothing is typed by hand. The decision
+tables apply the same rule as the HTML report (``causal_uplift.report.recommend``).
+
+Fit times in the Hillstrom ranking tables come from ``--timings-dir`` when it holds a file of
+the same name (by default the first full run, kept in ``bench/results/2026-10-09``). Later
+re-runs changed only the policy evaluation, not the learners, and were made while other jobs
+shared the machine, so their timings are recorded but not printed.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from causal_uplift.evaluation import RANDOM_POLICY, RESPONSE_POLICY
-from causal_uplift.report import recommend
+from causal_uplift.evaluation import BEST_ARM_POLICY, RANDOM_POLICY, RESPONSE_POLICY
+from causal_uplift.report import gain_key, recommend
 
 SKLIFT = "sklift-two-model"
 FROM_SCRATCH = ("s", "t", "x", "r", "dr", "forest-kl", "forest-ed")
+FIRST_FULL_RUN = Path(__file__).resolve().parent / "results" / "2026-10-09"
 LABELS = {
     "s": "S-learner",
     "t": "T-learner",
@@ -38,48 +45,54 @@ LABELS = {
 }
 
 
-def label(name: str) -> str:
+def label(name: str, result: dict[str, Any] | None = None, budget: str | None = None) -> str:
+    if name == BEST_ARM_POLICY and result is not None and budget is not None:
+        return f"best single e-mail at random ({_arm(result['policy'][budget][name], result)})"
     return LABELS.get(name, name)
 
 
-def _ci(interval: dict[str, float], digits: int) -> str:
+def _short(arm: str) -> str:
+    return arm.replace(" E-Mail", "")
+
+
+def _arm(policy: dict[str, Any], result: dict[str, Any]) -> str:
+    """The treatment a single-arm policy sends."""
+    treatments = result["dataset"]["arms"][1:]
+    return _short(max(treatments, key=lambda a: policy["arm_mix"][a]))
+
+
+def _ci(interval: dict[str, float] | None, digits: int) -> str:
+    if interval is None:
+        return "n/a"
     return f"{interval['value']:.{digits}f} [{interval['lo']:.{digits}f}, {interval['hi']:.{digits}f}]"
-
-
-def measured_on(result: dict[str, Any]) -> str:
-    m = result["machine"]
-    return (
-        f"Measured on {m['cpu']}, {m['logical_cores']} logical cores, {m['ram_gb']} GB RAM, {m['os']}, "
-        f"Python {m['python']}, CPU only; {result['date']}, commit {result['git_sha'][:12]}, "
-        f"`{result['command']}`, wall time {result['wall_seconds']} s."
-    )
 
 
 def _arm_mix(result: dict[str, Any], policy: dict[str, Any]) -> str:
     return " / ".join(f"{policy['arm_mix'][a]:.0%}" for a in result["dataset"]["arms"][1:])
 
 
-def _policy_row(result: dict[str, Any], budget: str, name: str, shown: str, gain_digits: int) -> str:
+def _gain_cell(policy: dict[str, Any], name: str, reference: str, digits: int) -> str:
+    own = {"random": RANDOM_POLICY, "best_arm": BEST_ARM_POLICY, "response": RESPONSE_POLICY}[reference]
+    return "reference" if name == own else _ci(policy.get(gain_key(reference)), digits)
+
+
+def _policy_row(result: dict[str, Any], budget: str, name: str, shown: str, digits: int) -> str:
     p = result["policy"][budget][name]
-    vs_random = "reference" if name == RANDOM_POLICY else _ci(p["aipw_gain_vs_random_per_1000_customers"], gain_digits)
-    vs_response = p.get("aipw_gain_vs_response_per_1000_customers")
-    vs_response_cell = (
-        "reference" if name == RESPONSE_POLICY else "n/a" if vs_response is None else _ci(vs_response, gain_digits)
-    )
+    gains = " | ".join(_gain_cell(p, name, r, digits) for r in ("random", "best_arm", "response"))
     return (
         f"| {float(budget):.0%} | {shown} | {_arm_mix(result, p)} | {_ci(p['aipw_per_1000_contacts'], 1)} "
-        f"| {p['ipw_per_1000_contacts']['value']:.1f} | {vs_random} | {vs_response_cell} |"
+        f"| {p['ipw_per_1000_contacts']['value']:.1f} | {gains} |"
     )
 
 
 def _policy_header(result: dict[str, Any]) -> list[str]:
     units = result["dataset"]["outcome"]
-    arms = " / ".join(a.replace(" E-Mail", "") for a in result["dataset"]["arms"][1:])
+    arms = " / ".join(_short(a) for a in result["dataset"]["arms"][1:])
     return [
         f"| budget | policy | share e-mailed ({arms}) | incremental {units}s per 1,000 contacts, AIPW [95% CI] "
-        "| same, IPW | gain vs random targeting per 1,000 customers [95% CI] "
-        "| gain vs response model per 1,000 customers [95% CI] |",
-        "|---|---|---|---|---|---|---|",
+        "| same, IPW | gain vs random targeting [95% CI] | gain vs best single e-mail at random [95% CI] "
+        "| gain vs response model [95% CI] |",
+        "|---|---|---|---|---|---|---|---|",
     ]
 
 
@@ -89,40 +102,54 @@ def best_from_scratch(result: dict[str, Any], budget: str) -> str:
     return max(candidates, key=lambda n: policies[n]["aipw_per_1000_customers"]["value"])
 
 
-def memo_policy_table(result: dict[str, Any], gain_digits: int = 2) -> str:
-    """Per budget: the best uplift learner of this package, the two baselines and random targeting."""
+def memo_policy_table(result: dict[str, Any], digits: int = 2) -> str:
+    """Per budget: the best uplift learner of this package, the baselines and the no-model policies."""
     lines = _policy_header(result)
-    for budget in result["policy"]:
+    for budget, policies in result["policy"].items():
         best = best_from_scratch(result, budget)
         rows = [(best, f"best uplift learner: {label(best)}")]
-        rows += [(n, label(n)) for n in (RESPONSE_POLICY, SKLIFT, RANDOM_POLICY) if n in result["policy"][budget]]
-        lines += [_policy_row(result, budget, name, shown, gain_digits) for name, shown in rows]
+        rows += [
+            (n, label(n, result, budget))
+            for n in (RESPONSE_POLICY, SKLIFT, BEST_ARM_POLICY, RANDOM_POLICY)
+            if n in policies
+        ]
+        lines += [_policy_row(result, budget, name, shown, digits) for name, shown in rows]
     return "\n".join(lines)
 
 
-def full_policy_table(result: dict[str, Any], gain_digits: int = 2) -> str:
+def full_policy_table(result: dict[str, Any], digits: int = 2) -> str:
     """Every evaluated policy, ordered by AIPW value within each budget."""
     lines = _policy_header(result)
     for budget, policies in result["policy"].items():
         ordered = sorted(policies, key=lambda n: -policies[n]["aipw_per_1000_customers"]["value"])
-        lines += [_policy_row(result, budget, name, label(name), gain_digits) for name in ordered]
+        lines += [_policy_row(result, budget, name, label(name, result, budget), digits) for name in ordered]
     return "\n".join(lines)
 
 
-def recommendation_lines(result: dict[str, Any], gain_digits: int = 2) -> str:
-    lines = []
+def decision_table(result: dict[str, Any], digits: int = 2) -> str:
+    """Per budget: the winner, its gains with and without the allowance for picking it, and the verdicts."""
+    n = result["settings"]["candidate_policies"]
+    lines = [
+        f"| budget | highest AIPW value | gain vs random targeting [95% CI] | same, simultaneous over {n} learners "
+        "| gain vs best single e-mail at random [95% CI] | same, simultaneous "
+        "| rule as first written | revised rule |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
     for rec in recommend(result):
-        gain = _ci(rec["gain_vs_random"], gain_digits)
-        verdict = "interval above zero: target" if rec["beats_random"] else "interval includes zero: no model"
+        first = "target" if rec["first_rule"] else "no model"
+        revised = "target" if rec["target"] else "no model"
         lines.append(
-            f"* {float(rec['budget']):.0%}: highest AIPW value is {label(rec['policy'])}; "
-            f"gain vs random {gain} per 1,000 customers ({verdict})"
+            f"| {float(rec['budget']):.0%} | {label(rec['policy'])} | {_ci(rec['gain_vs_random'], digits)} "
+            f"| {_ci(rec['gain_vs_random_simultaneous'], digits)} | {_ci(rec['gain_vs_best_arm'], digits)} "
+            f"| {_ci(rec['gain_vs_best_arm_simultaneous'], digits)} | {first} | {revised} |"
         )
     return "\n".join(lines)
 
 
-def ranking_table(result: dict[str, Any]) -> str:
+def ranking_table(result: dict[str, Any], timings: dict[str, Any] | None = None) -> str:
+    """Qini and AUUC per e-mail; fit times from ``timings`` (another run of the same suite) when given."""
     arms = result["dataset"]["arms"][1:]
+    source = timings or result
     header = (
         "| learner | "
         + " | ".join(f"Qini coef., {a} [95% CI]" for a in arms)
@@ -134,7 +161,7 @@ def ranking_table(result: dict[str, Any]) -> str:
     for name, entry in result["learners"].items():
         qini = " | ".join(_ci(entry["ranking"][a]["qini"], 3) for a in arms)
         auuc = " | ".join(_ci(entry["ranking"][a]["auuc"], 4) for a in arms)
-        lines.append(f"| {label(name)} | {qini} | {auuc} | {entry['fit_seconds_median']:.2f} |")
+        lines.append(f"| {label(name)} | {qini} | {auuc} | {source['learners'][name]['fit_seconds_median']:.2f} |")
     return "\n".join(lines)
 
 
@@ -171,28 +198,77 @@ def synthetic_qini_table(result: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _machine(result: dict[str, Any]) -> str:
+    m = result["machine"]
+    cpu = re.sub(r"\s+", " ", re.sub(r"\((R|TM)\)|CPU @.*$", "", m["cpu"])).strip()
+    match = re.match(r"(\w+)-(\d+)-([\d.]+)", m["os"])
+    system = f"{match[1]} {match[2]} ({match[3]})" if match else m["os"]
+    return (
+        f"{cpu}, {m['logical_cores']} cores, {round(m['ram_gb'])} GB RAM ({m['ram_gb']} GB usable), {system}, CPU only"
+    )
+
+
+def _software(result: dict[str, Any]) -> str:
+    packages = result["machine"]["packages"]
+    shown = ("numpy", "polars", "lightgbm", "scikit-learn", "numba", "scikit-uplift")
+    return f"Python {result['machine']['python']}; " + ", ".join(f"{p} {packages[p]}" for p in shown)
+
+
+def run_details(runs: list[tuple[str, str, dict[str, Any]]]) -> str:
+    """One row per result file: what it supplies, when and from which commit it was measured."""
+    first = runs[0][2]
+    lines = [
+        "| run detail | value |",
+        "|---|---|",
+        f"| Measured on | {_machine(first)} |",
+        f"| software | {_software(first)} |",
+    ]
+    for what, path, result in runs:
+        lines.append(
+            f"| {what} (`{path}`) | {result['date'][:10]}, commit `{result['git_sha'][:7]}`, "
+            f"`{result['command']}`, wall time {result['wall_seconds']} s |"
+        )
+    return "\n".join(lines)
+
+
+def _load(path: Path) -> dict[str, Any]:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--results-dir", default=str(Path(__file__).resolve().parent / "results"))
     parser.add_argument("--prefix", default="", help="file prefix, e.g. smoke-")
+    parser.add_argument("--timings-dir", default=str(FIRST_FULL_RUN), help="run whose fit times are printed")
     args = parser.parse_args()
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")  # the tables contain "±"; Windows consoles default to a code page
     root = Path(args.results_dir)
+    timings_dir = Path(args.timings_dir)
     pre = args.prefix
+    runs: list[tuple[str, str, dict[str, Any]]] = []
     for path in sorted(root.glob(f"{pre}hillstrom_*.json")) + sorted(root.glob(f"{pre}criteo_*.json")):
-        result = json.loads(path.read_text(encoding="utf-8"))
-        print(f"## {path.name}\n\n{measured_on(result)}\n")
+        result = _load(path)
+        timing_path = timings_dir / path.name
+        timings = _load(timing_path) if timing_path.exists() else None
+        runs.append(("policy values and ranking", path.name, result))
+        if timings is not None:
+            runs.append(("fit times", f"{timings_dir.name}/{path.name}", timings))
+        print(f"## {path.name}\n")
+        print(decision_table(result), "\n")
         print(memo_policy_table(result), "\n")
-        print(recommendation_lines(result), "\n")
-        print(ranking_table(result), "\n")
+        print(ranking_table(result, timings), "\n")
         print(full_policy_table(result), "\n")
     synthetic = root / f"{pre}synthetic.json"
     if synthetic.exists():
-        result = json.loads(synthetic.read_text(encoding="utf-8"))
-        print(f"## {synthetic.name}\n\n{measured_on(result)}\n")
+        result = _load(synthetic)
+        runs.append(("synthetic suite", synthetic.name, result))
+        print(f"## {synthetic.name}\n")
         print(pehe_table(result), "\n")
         print(synthetic_qini_table(result), "\n")
+    if runs:
+        print("## run details\n")
+        print(run_details(runs))
     return 0
 
 
