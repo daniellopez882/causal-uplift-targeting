@@ -40,7 +40,10 @@ targeting has a 95% percentile interval above zero. Reviewing those results show
   value reported for the chosen policy is still optimistic.
 * Bands are wider than single-policy intervals by an amount that depends on how correlated the
   candidates are. Policies that contact mostly the same customers cost little width; the T-learner
-  and its scikit-uplift twin, which are identical, cost nothing.
+  and its scikit-uplift twin, which are identical, cost nothing. The band is symmetric around the
+  estimate while a percentile interval need not be, so with a skewed bootstrap distribution one end
+  of the band can sit slightly inside the percentile interval; the README states whether that
+  happened in the published run.
 * With unequal arm costs, the reference arm is chosen per budget by effect times the share the
   budget pays for, so it can change between budgets.
 * Single-treatment data get no second reference: the best arm at random is then random targeting.

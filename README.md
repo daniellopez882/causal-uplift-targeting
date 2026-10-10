@@ -273,8 +273,9 @@ What these show:
 * Conversions are rare, so differences of a few conversions per 1,000 customers sit inside the
   intervals. 64,000 customers is small for ranking individuals by a causal effect: for conversions,
   every Qini interval for the Mens e-mail includes zero.
-* The decision rule was revised after the first results were seen (ADR 0005). The revision makes
-  the test stricter, not looser, and the verdicts under the first rule are published next to it.
+* The decision rule was revised after the first results were seen (ADR 0005). On these results
+  every simultaneous band contains the matching 95% interval, so the revision only made the test
+  stricter; the verdicts under the first rule are published next to the new ones.
 * The simultaneous band corrects the test of the chosen policy for the choice among nine; it does
   not correct the estimate, so the value shown for the best learner at each budget is optimistic.
   The single-e-mail reference is chosen with hindsight on the same customers, which can only
