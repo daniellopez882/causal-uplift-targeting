@@ -15,8 +15,8 @@ BaseKind = Literal["lightgbm", "linear"]
 BASE_KINDS: tuple[BaseKind, ...] = ("lightgbm", "linear")
 
 # Deliberately shallow and slow: effects are a few points on a noisy binary outcome, and the
-# second stages of X/R/DR regress noisy pseudo-outcomes. Chosen on the synthetic generator
-# (seeds 3 and 4), never on the Hillstrom data.
+# second stages of X/R/DR regress noisy pseudo-outcomes. Set by hand and shared by every
+# learner and data set; there is no recorded search behind these values.
 LIGHTGBM_DEFAULTS: dict[str, Any] = {
     "n_estimators": 300,
     "learning_rate": 0.03,
