@@ -4,8 +4,8 @@ Status: accepted, 2026-10-09
 
 ## Context
 
-The spec names scikit-uplift and causalml as parity references, and the Hillstrom and Criteo uplift
-data sets. Every claim must be reproducible from a clean checkout on a machine with limited disk,
+Two independent implementations could serve as parity references: scikit-uplift and causalml. The
+data sets are the Hillstrom e-mail test and Criteo's uplift data. Every claim must be reproducible from a clean checkout on a machine with limited disk,
 and CI must pass without the data sets.
 
 ## Decision

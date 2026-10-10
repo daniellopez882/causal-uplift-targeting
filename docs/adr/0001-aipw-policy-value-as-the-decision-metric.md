@@ -1,6 +1,6 @@
 # ADR 0001: Decide on cross-fitted AIPW policy value, not on Qini alone
 
-Status: accepted, 2026-10-09
+Status: accepted, 2026-10-09. The decision rule in the fourth bullet was amended by ADR 0005.
 
 ## Context
 
@@ -40,7 +40,8 @@ off-policy estimators unbiased without modelling assignment.
   from refitting the learners, so they are narrower than a full repeated-split procedure. The README
   and the report say so.
 * Picking the best of several policies on the same data and reporting its estimate is optimistic.
-  The report says so; it does not correct for it.
+  As first written, the rule did not correct for it; ADR 0005 moved the test to a simultaneous
+  interval.
 
 ## Alternatives rejected
 

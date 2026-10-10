@@ -4,8 +4,8 @@ Status: accepted, 2026-10-09
 
 ## Context
 
-The spec asks for divergence-split uplift trees (KL and Euclidean, Rzepakowski and Jaroszewicz
-2012) built from scratch, with honest estimation and support for more than one treatment arm.
+The project needs its own divergence-split uplift trees (KL and Euclidean, Rzepakowski and
+Jaroszewicz 2012), with honest estimation and support for more than one treatment arm.
 scikit-learn trees cannot use a custom split criterion. A pure Python tree is too slow for a forest
 of a few hundred trees on 51,000 training rows per fold, refitted 5 times per outcome in the
 benchmark.
