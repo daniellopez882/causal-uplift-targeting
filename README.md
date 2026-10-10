@@ -328,7 +328,7 @@ sequenceDiagram
     participant Data as loaders and synthetic generator
     participant Folds as 5 stratified folds
     participant Learners as S, T, X, R, DR, forests, baselines
-    participant Opt as budget optimiser
+    participant Optimiser as budget optimiser
     participant OPE as IPW and AIPW evaluator
     participant Out as results JSON and HTML report
     CLI->>Data: Hillstrom (sha256-checked fetch), Parquet or CSV, or synthetic
@@ -340,8 +340,8 @@ sequenceDiagram
     end
     Learners->>Out: Qini and AUUC with bootstrap intervals
     loop every budget
-        Learners->>Opt: held-out effects
-        Opt->>OPE: one allocation per learner, fold by fold
+        Learners->>Optimiser: held-out effects
+        Optimiser->>OPE: one allocation per learner, fold by fold
         OPE->>OPE: add random targeting and the best single arm at random
         OPE->>OPE: paired bootstrap, percentile and max-t intervals
     end
